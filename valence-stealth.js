@@ -1,4 +1,4 @@
-// Valence Stealth Engine v3.1.6 — Bypass Script
+// Valence Stealth Engine v3.1.7 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
 //
@@ -8,6 +8,7 @@
 // 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
 //
 // Changelog:
+// - v3.1.7 (2026-09-11): Completely eliminated internal GUARD symbol on window; patched window.Reflect.ownKeys, window.Object.getOwnPropertySymbols, and window.Error.prototype across both Cu.Sandbox and page window contexts; added V8 stack formatting and captureStackTrace to all window error prototypes and container windows.
 // - v3.1.6 (2026-09-11): Added hardwareConcurrency and core navigator properties to Worker scope shim; neutralized AudioNode float and byte frequency mutations to preserve hardware audio float integrity; implemented Error.captureStackTrace and Error.stackTraceLimit for V8 stack API compatibility; enhanced sanitizeWindow and createElement to propagate navigator spoofing to <object> and iframe container windows.
 // - v3.1.5 (2026-09-10): Neutralized all canvas noise mutations to maintain raw pixel integrity; filtered internal symbols in Reflect.ownKeys; removed Element.style Proxy to restore native WebIDL C++ invocation; hooked HTMLObjectElement contentDocument; added V8 call stack formatting to Error.prototype.stack; shimmed Worker scope userAgent via createObjectURL.
 // - v3.1.4 (2026-09-10): Protected small canvas rects from noise mutation; hid Gecko-specific CSS properties (MozUserSelect) from style objects to prevent browser engine contradiction; standardized native function serialization to Chrome single-line format; extended fake mouse event wrapping to object-based event listeners with handleEvent.
@@ -28,11 +29,10 @@
     }
   } catch(eHost) {}
 
-  var GUARD = Symbol();
-  if (window[GUARD]) return;
+  // Prevent double-initialization without creating or leaking any symbols on window
   try {
-    Object.defineProperty(window, GUARD, { value: 1, writable: false, enumerable: false, configurable: false });
-  } catch(eGuard) {}
+    if (window.chrome && window.chrome.loadTimes) return;
+  } catch(eInit) {}
 
   // ═══════════════════════════════════════════════════════════════
   // CORE: Save original native references
@@ -103,30 +103,52 @@
   Function.prototype.toString = _toStrOverride;
   try { window.Function.prototype.toString = _toStrOverride; } catch(e) {}
 
-  // Filter out internal GUARD symbol and any symbols from Object.getOwnPropertySymbols and Reflect.ownKeys on window
-  try {
-    var _origGetOwnPropertySymbols = Object.getOwnPropertySymbols;
-    Object.defineProperty(Object, 'getOwnPropertySymbols', {
-      configurable: true, enumerable: false, writable: true,
-      value: disguise(function getOwnPropertySymbols(target) {
-        if (target === window || target === Window.prototype) {
-          return [];
-        }
-        return _origGetOwnPropertySymbols.call(Object, target);
-      }, 'getOwnPropertySymbols')
-    });
-  } catch(eSym) {}
+  // Filter out any symbols from Object.getOwnPropertySymbols and Reflect.ownKeys on all window targets
+  function isWindowTarget(target) {
+    if (!target) return false;
+    try {
+      if (target === window || target === Window.prototype) return true;
+      if (typeof Window !== 'undefined' && target instanceof Window) return true;
+      if (typeof window.Window !== 'undefined' && target instanceof window.Window) return true;
+      if (target.window === target || target.self === target) return true;
+    } catch(e) {}
+    return false;
+  }
 
-  try {
-    var _origReflectOwnKeys = Reflect.ownKeys;
-    Reflect.ownKeys = disguise(function ownKeys(target) {
-      var keys = _origReflectOwnKeys(target);
-      if (target === window || target === Window.prototype) {
-        return keys.filter(function(k) { return typeof k !== 'symbol'; });
+  function patchObjectAndReflect(targetObj, targetReflect) {
+    try {
+      if (targetObj && targetObj.getOwnPropertySymbols) {
+        var origGetSymbols = targetObj.getOwnPropertySymbols;
+        targetObj.defineProperty(targetObj, 'getOwnPropertySymbols', {
+          configurable: true, enumerable: false, writable: true,
+          value: disguise(function getOwnPropertySymbols(target) {
+            if (isWindowTarget(target)) {
+              return [];
+            }
+            return origGetSymbols.call(targetObj, target);
+          }, 'getOwnPropertySymbols')
+        });
       }
-      return keys;
-    }, 'ownKeys');
-  } catch(eROK) {}
+    } catch(eObj) {}
+
+    try {
+      if (targetReflect && targetReflect.ownKeys) {
+        var origReflectKeys = targetReflect.ownKeys;
+        targetReflect.ownKeys = disguise(function ownKeys(target) {
+          var keys = origReflectKeys(target);
+          if (isWindowTarget(target)) {
+            return keys.filter(function(k) { return typeof k !== 'symbol'; });
+          }
+          return keys;
+        }, 'ownKeys');
+      }
+    } catch(eRef) {}
+  }
+
+  patchObjectAndReflect(Object, Reflect);
+  if (typeof window !== 'undefined' && window.Object) {
+    patchObjectAndReflect(window.Object, window.Reflect);
+  }
 
 
   // ═══════════════════════════════════════════════════════════════
@@ -941,6 +963,16 @@
           } catch(e) {}
         }
       } catch(eNav) {}
+      try {
+        if (win.Object && win.Reflect) {
+          patchObjectAndReflect(win.Object, win.Reflect);
+        }
+      } catch(eOR) {}
+      try {
+        if (typeof patchErrorConstructors === 'function' && win.Error) {
+          patchErrorConstructors(win);
+        }
+      } catch(eErr) {}
     }
 
     if (typeof HTMLIFrameElement !== 'undefined' && HTMLIFrameElement.prototype) {
@@ -1164,67 +1196,86 @@
       return v8Lines.join('\n');
     }
 
-    var _origErrorStackDesc = Object.getOwnPropertyDescriptor(Error.prototype, 'stack');
-    var _origStackGet = _origErrorStackDesc ? _origErrorStackDesc.get : null;
-    var _origStackSet = _origErrorStackDesc ? _origErrorStackDesc.set : null;
-    Object.defineProperty(Error.prototype, 'stack', {
-      get: disguise(function stack() {
-        var raw = _origStackGet ? _origStackGet.call(this) : (this.__rawStack__ || '');
-        return formatStackToV8(this, raw);
-      }, 'get stack'),
-      set: disguise(function stack(val) {
-        if (_origStackSet) {
-          return _origStackSet.call(this, val);
-        }
-        this.__rawStack__ = val;
-      }, 'set stack'),
-      configurable: true,
-      enumerable: false
-    });
+    function patchErrorConstructors(scope) {
+      if (!scope) return;
+      var ctors = [];
+      if (typeof scope.Error === 'function') ctors.push(scope.Error);
+      ['TypeError', 'RangeError', 'ReferenceError', 'SyntaxError', 'URIError', 'EvalError'].forEach(function(n) {
+        if (typeof scope[n] === 'function') ctors.push(scope[n]);
+      });
 
-    if (typeof Error.captureStackTrace === 'undefined') {
-      var captureStackTrace = function captureStackTrace(targetObject, constructorOpt) {
-        if (!targetObject || typeof targetObject !== 'object') return;
-        var dummy = new Error();
-        var rawStack = dummy.stack;
-        Object.defineProperty(targetObject, 'stack', {
-          get: function() {
-            var s = typeof rawStack === 'string' ? rawStack : (dummy.stack || '');
-            if (constructorOpt && typeof constructorOpt === 'function') {
-              var name = constructorOpt.name;
-              if (name) {
-                var lines = s.split('\n');
-                var idx = -1;
-                for (var i = 0; i < lines.length; i++) {
-                  if (lines[i].indexOf(name) !== -1) {
-                    idx = i;
-                    break;
-                  }
-                }
-                if (idx !== -1) {
-                  s = [lines[0]].concat(lines.slice(idx + 1)).join('\n');
-                }
+      ctors.forEach(function(ErrCtor) {
+        try {
+          if (!ErrCtor || !ErrCtor.prototype) return;
+          var desc = Object.getOwnPropertyDescriptor(ErrCtor.prototype, 'stack');
+          var origGet = desc ? desc.get : null;
+          var origSet = desc ? desc.set : null;
+          Object.defineProperty(ErrCtor.prototype, 'stack', {
+            get: disguise(function stack() {
+              var raw = origGet ? origGet.call(this) : (this.__rawStack__ || '');
+              return formatStackToV8(this, raw);
+            }, 'get stack'),
+            set: disguise(function stack(val) {
+              if (origSet) {
+                return origSet.call(this, val);
               }
-            }
-            return s;
-          },
-          set: function(val) {
-            Object.defineProperty(targetObject, 'stack', { value: val, writable: true, configurable: true, enumerable: true });
-          },
-          configurable: true,
-          enumerable: false
-        });
-      };
-      Object.defineProperty(Error, 'captureStackTrace', {
-        value: disguise(captureStackTrace, 'captureStackTrace'),
-        configurable: true,
-        writable: true,
-        enumerable: false
+              this.__rawStack__ = val;
+            }, 'set stack'),
+            configurable: true,
+            enumerable: false
+          });
+
+          if (typeof ErrCtor.captureStackTrace === 'undefined') {
+            var captureStackTrace = function captureStackTrace(targetObject, constructorOpt) {
+              if (!targetObject || typeof targetObject !== 'object') return;
+              var dummy = new ErrCtor();
+              var rawStack = dummy.stack;
+              Object.defineProperty(targetObject, 'stack', {
+                get: function() {
+                  var s = typeof rawStack === 'string' ? rawStack : (dummy.stack || '');
+                  if (constructorOpt && typeof constructorOpt === 'function') {
+                    var name = constructorOpt.name;
+                    if (name) {
+                      var lines = s.split('\n');
+                      var idx = -1;
+                      for (var i = 0; i < lines.length; i++) {
+                        if (lines[i].indexOf(name) !== -1) {
+                          idx = i;
+                          break;
+                        }
+                      }
+                      if (idx !== -1) {
+                        s = [lines[0]].concat(lines.slice(idx + 1)).join('\n');
+                      }
+                    }
+                  }
+                  return s;
+                },
+                set: function(val) {
+                  Object.defineProperty(targetObject, 'stack', { value: val, writable: true, configurable: true, enumerable: true });
+                },
+                configurable: true,
+                enumerable: false
+              });
+            };
+            Object.defineProperty(ErrCtor, 'captureStackTrace', {
+              value: disguise(captureStackTrace, 'captureStackTrace'),
+              configurable: true,
+              writable: true,
+              enumerable: false
+            });
+          }
+          if (typeof ErrCtor.stackTraceLimit === 'undefined') {
+            ErrCtor.stackTraceLimit = 10;
+          }
+        } catch(eErr) {}
       });
     }
-    if (typeof Error.stackTraceLimit === 'undefined') {
-      Error.stackTraceLimit = 10;
+
+    if (typeof window !== 'undefined' && window.Error) {
+      patchErrorConstructors(window);
     }
+    patchErrorConstructors({ Error: Error });
   } catch(eStack) {}
 
 })();

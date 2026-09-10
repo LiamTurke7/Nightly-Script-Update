@@ -1,4 +1,4 @@
-// Valence Stealth Engine v3.1.2 — Bypass Script
+// Valence Stealth Engine v3.1.3 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
 //
@@ -8,6 +8,7 @@
 // 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
 //
 // Changelog:
+// - v3.1.3 (2026-09-10): Replaced string marker disguise with private WeakSet; eliminated _VS_ and __vs3 symbol signatures; prevented isTrusted proxy leaks on untrusted events; normalized screen dimensions to dynamic windowed/fullscreen modes; hooked HTMLIFrameElement contentWindow/contentDocument to sanitize sync iframe stringification; removed _vsBlocked XHR property; added smooth rAF delta virtualizer; removed top-edge mouse clamping.
 // - v3.1.2 (2026-09-10): Standardized WebIDL prototype properties to enumerable: true, and removed instance shadowing for Window and Screen to pass runtime consistency tests.
 // - v3.1.1 (2026-09-10): Added search engine exemption filter to run native Firefox on Google/Bing and updated Chrome UA to stable release.
 // - v3.1.0 (2026-09-10): Standardized WebIDL prototype descriptors, reference equality, and Chrome-format function toString serialization.
@@ -24,9 +25,11 @@
     }
   } catch(eHost) {}
 
-  var GUARD = Symbol.for('__vs3');
+  var GUARD = Symbol();
   if (window[GUARD]) return;
-  Object.defineProperty(window, GUARD, { value: 1, writable: false, enumerable: false, configurable: false });
+  try {
+    Object.defineProperty(window, GUARD, { value: 1, writable: false, enumerable: false, configurable: false });
+  } catch(eGuard) {}
 
   // ═══════════════════════════════════════════════════════════════
   // CORE: Save original native references
@@ -57,43 +60,51 @@
   // ═══════════════════════════════════════════════════════════════
   // CORE: Function disguise system
   //
-  // TWO problems solved here:
-  // 1. Cu.Sandbox has its own Function constructor. Patching
-  //    Function.prototype.toString only affects sandbox functions'
-  //    .toString() calls, NOT when the page does
-  //    Function.prototype.toString.call(fn). Fix: patch BOTH
-  //    sandbox and page Function.prototype.toString.
-  //
-  // 2. Simple functions like "return false" have no identifiable
-  //    markers. Fix: disguise() WRAPS every function so its source
-  //    automatically contains our marker variable '_VS_'.
+  // Use a private WeakSet to identify disguised functions.
+  // This completely eliminates any identifiable strings (such as
+  // marker variable names) from function source code or toString().
   // ═══════════════════════════════════════════════════════════════
-  var _VS_ = 1; // Marker variable — its name appears in all wrapped function source code
+  var _nativeFuncs = new WeakSet();
 
   function disguise(fn, name) {
-    // Wrap fn so that the wrapper's source code contains '_VS_'
-    var w = function() { void _VS_; return fn.apply(this, arguments); };
-    try { Object.defineProperty(w, 'name', { value: name, configurable: true, enumerable: true }); } catch(e) {}
-    try { Object.defineProperty(w, 'length', { value: fn.length || 0, configurable: true, enumerable: true }); } catch(e) {}
-    return w;
+    if (typeof fn !== 'function') return fn;
+    _nativeFuncs.add(fn);
+    try { Object.defineProperty(fn, 'name', { value: name, configurable: true, enumerable: false }); } catch(e) {}
+    try { Object.defineProperty(fn, 'length', { value: fn.length || 0, configurable: true, enumerable: false }); } catch(e) {}
+    return fn;
   }
 
-  // The toString override — checks if source contains our marker
+  // The toString override — returns native code for disguised functions
   var _toStrOverride = function toString() {
-    var s;
-    try { s = _fnToStr.call(this); } catch(e) { return ''; }
-    var ncode = '[native' + ' code]';
-    if (s.indexOf(ncode) >= 0) return s;
-    if (s.indexOf('_VS_') >= 0) {
-      return 'function ' + (this.name || '') + '() { ' + ncode + ' }';
+    if (this === _toStrOverride || this === _fnToStr) {
+      return 'function toString() { [native code] }';
     }
-    return s;
+    if (typeof this === 'function' && _nativeFuncs.has(this)) {
+      return 'function ' + (this.name || '') + '() { [native code] }';
+    }
+    return _fnToStr.call(this);
   };
-  try { Object.defineProperty(_toStrOverride, 'name', { value: 'toString' }); } catch(e) {}
+  _nativeFuncs.add(_toStrOverride);
+  try { Object.defineProperty(_toStrOverride, 'name', { value: 'toString', configurable: true, enumerable: false }); } catch(e) {}
 
   // Patch BOTH sandbox and page Function.prototype.toString
   Function.prototype.toString = _toStrOverride;
   try { window.Function.prototype.toString = _toStrOverride; } catch(e) {}
+
+  // Filter out internal GUARD symbol from Object.getOwnPropertySymbols on window
+  try {
+    var _origGetOwnPropertySymbols = Object.getOwnPropertySymbols;
+    Object.defineProperty(Object, 'getOwnPropertySymbols', {
+      configurable: true, enumerable: false, writable: true,
+      value: disguise(function getOwnPropertySymbols(target) {
+        var syms = _origGetOwnPropertySymbols.call(Object, target);
+        if (target === window || target === Window.prototype) {
+          return syms.filter(function(s) { return s !== GUARD; });
+        }
+        return syms;
+      }, 'getOwnPropertySymbols')
+    });
+  } catch(eSym) {}
 
 
   // ═══════════════════════════════════════════════════════════════
@@ -116,17 +127,23 @@
   // 2. SCREEN DIMENSION SPOOFING
   //
   // KEY FIX: outerHeight must NOT equal innerHeight or screen.height
-  // to avoid the "all dimensions identical" detection.
-  // outerWidth also gets a small offset.
+  // when windowed to avoid "all dimensions identical" or "hardcoded
+  // dimension offset (screen.height + 85)" detections.
+  // When in genuine fullscreen, dimensions match screen.
   // ═══════════════════════════════════════════════════════════════
+  var _currentFullscreenElement = null;
+
+  function isFullscreenActive() {
+    return _currentFullscreenElement !== null;
+  }
   function getScreenW() { return window.screen ? (window.screen.width || 1920) : 1920; }
   function getScreenH() { return window.screen ? (window.screen.height || 1080) : 1080; }
 
   var sizeOverrides = [
-    ['innerWidth',  function innerWidth()  { return getScreenW(); }],
-    ['innerHeight', function innerHeight() { return getScreenH(); }],
-    ['outerWidth',  function outerWidth()  { return getScreenW() + 16; }],
-    ['outerHeight', function outerHeight() { return getScreenH() + 85; }],
+    ['innerWidth',  function innerWidth()  { return isFullscreenActive() ? getScreenW() : (getScreenW() - 16); }],
+    ['innerHeight', function innerHeight() { return isFullscreenActive() ? getScreenH() : (getScreenH() - 114); }],
+    ['outerWidth',  function outerWidth()  { return getScreenW(); }],
+    ['outerHeight', function outerHeight() { return isFullscreenActive() ? getScreenH() : (getScreenH() - 40); }],
     ['screenX',     function screenX()     { return 0; }],
     ['screenY',     function screenY()     { return 0; }],
     ['screenLeft',  function screenLeft()  { return 0; }],
@@ -141,7 +158,7 @@
 
   var screenOverrides = [
     ['availWidth',  function availWidth()  { return getScreenW(); }],
-    ['availHeight', function availHeight() { return getScreenH(); }],
+    ['availHeight', function availHeight() { return getScreenH() - 40; }],
     ['availTop',    function availTop()    { return 0; }],
     ['availLeft',   function availLeft()   { return 0; }],
   ];
@@ -167,7 +184,6 @@
   // exam site sees a successful fullscreen transition. We do NOT
   // actually go fullscreen — we just fake the entire API surface.
   // ═══════════════════════════════════════════════════════════════
-  var _currentFullscreenElement = null;
 
   function _enterFullscreen(el) {
     _currentFullscreenElement = el;
@@ -271,17 +287,11 @@
 
 
   // ═══════════════════════════════════════════════════════════════
-  // 4. MOUSE BOUNDARY CLAMPING
+  // 4. MOUSE BOUNDARY PROTECTION
   //
-  // KEY FIX: Use a 75px top margin to prevent the exam site from
-  // detecting the mouse near the top edge (macOS menu bar area).
-  // This ensures the mouse never accidentally triggers top-edge
-  // detection on the exam website.
+  // Ensure mouse coordinates remain strictly within valid view bounds
+  // without artificially restricting normal upper cursor movement.
   // ═══════════════════════════════════════════════════════════════
-  var TOP_MARGIN = 75;
-  var SIDE_MARGIN = 15;
-  var BOTTOM_MARGIN = 15;
-
   function getRealViewW() {
     try {
       if (_origIWGetter) { var v = _origIWGetter.call(window); if (typeof v === 'number' && v > 0) return v; }
@@ -300,10 +310,10 @@
       var w = getRealViewW(), h = getRealViewH();
       var nx = e.clientX, ny = e.clientY;
       var clamped = false;
-      if (ny < TOP_MARGIN) { ny = TOP_MARGIN; clamped = true; }
-      if (ny > h - BOTTOM_MARGIN) { ny = h - BOTTOM_MARGIN; clamped = true; }
-      if (nx < SIDE_MARGIN) { nx = SIDE_MARGIN; clamped = true; }
-      if (nx > w - SIDE_MARGIN) { nx = w - SIDE_MARGIN; clamped = true; }
+      if (ny < 0) { ny = 0; clamped = true; }
+      if (ny > h) { ny = h; clamped = true; }
+      if (nx < 0) { nx = 0; clamped = true; }
+      if (nx > w) { nx = w; clamped = true; }
       if (clamped) {
         try {
           Object.defineProperty(e, 'clientX', { value: nx, configurable: true, enumerable: true });
@@ -328,13 +338,13 @@
   // ═══════════════════════════════════════════════════════════════
 
   // 5a. Override addEventListener to wrap mousemove/pointermove listeners
-  //     so dispatched (untrusted) events appear trusted via Proxy.
-  //     Use a WeakMap to track original→wrapper so removeEventListener works.
+  //     so ONLY our internal synthetic events appear trusted via Proxy.
+  //     Page-dispatched synthetic events remain untrusted (isTrusted: false).
   var _listenerMap = new WeakMap();
+  var _ourSyntheticEvents = new WeakSet();
 
   try { Object.defineProperty(EventTarget.prototype, 'addEventListener', { configurable: true, enumerable: false, writable: true, value: disguise(function addEventListener(type, listener, options) {
     if ((type === 'mousemove' || type === 'pointermove') && typeof listener === 'function') {
-      // Check if we already have a wrapper for this listener
       var mapKey = listener;
       var wrapperMap = _listenerMap.get(mapKey);
       if (!wrapperMap) {
@@ -344,7 +354,7 @@
       if (!wrapperMap[type]) {
         var orig = listener;
         wrapperMap[type] = function(e) {
-          if (!e.isTrusted) {
+          if (_ourSyntheticEvents.has(e)) {
             e = new Proxy(e, {
               get: function(target, prop) {
                 if (prop === 'isTrusted') return true;
@@ -389,7 +399,7 @@
     try {
       var w = getScreenW(), h = getScreenH();
       _fakeX = randomWalk(_fakeX, 100, w - 100, 35);
-      _fakeY = randomWalk(_fakeY, TOP_MARGIN + 50, h - 100, 30);
+      _fakeY = randomWalk(_fakeY, 100, h - 100, 30);
 
       var me = new MouseEvent('mousemove', {
         clientX: _fakeX, clientY: _fakeY,
@@ -398,6 +408,7 @@
         pageY: _fakeY + (window.scrollY || 0),
         bubbles: true, cancelable: true, view: window
       });
+      _ourSyntheticEvents.add(me);
       _dispatch.call(document, me);
 
       try {
@@ -407,6 +418,7 @@
           bubbles: true, cancelable: true, view: window,
           pointerId: 1, pointerType: 'mouse'
         });
+        _ourSyntheticEvents.add(pe);
         _dispatch.call(document, pe);
       } catch(e3) {}
     } catch(e4) {}
@@ -477,19 +489,21 @@
   }
 
   // 7b. XMLHttpRequest
+  var _blockedXhrs = new WeakSet();
+
   try { Object.defineProperty(XMLHttpRequest.prototype, 'open', { configurable: true, enumerable: false, writable: true, value: disguise(function open(method, url) {
-    this._vsBlocked = false;
+    _blockedXhrs.delete(this);
     try {
       var urlStr = (url && typeof url.toString === 'function') ? url.toString() : '';
       if (EXT_RE.test(urlStr)) {
-        this._vsBlocked = true;
+        _blockedXhrs.add(this);
         return;
       }
     } catch(e) {}
     return _xhrOpen.apply(this, arguments);
   }, 'open') }); } catch(e) {}
   try { Object.defineProperty(XMLHttpRequest.prototype, 'send', { configurable: true, enumerable: false, writable: true, value: disguise(function send() {
-    if (this._vsBlocked) {
+    if (_blockedXhrs.has(this)) {
       var self = this;
       _setTimeout(function() { try { self.dispatchEvent(new Event('error')); } catch(e7) {} }, 0);
       return;
@@ -878,10 +892,64 @@
 
 
   // ═══════════════════════════════════════════════════════════════
-  // 17. IFRAME PROTECTION — Also patch new iframes' prototypes
-  //     so the testbench iframe-check sees clean Function.toString
+  // 17. IFRAME PROTECTION — Patch contentWindow/contentDocument
+  //     synchronously so clean-room iframe tests see native toString
   // ═══════════════════════════════════════════════════════════════
   try {
+    function sanitizeWindow(win) {
+      if (!win) return;
+      try {
+        if (win.Function && win.Function.prototype && win.Function.prototype.toString !== _toStrOverride) {
+          win.Function.prototype.toString = _toStrOverride;
+        }
+      } catch(e) {}
+    }
+
+    if (typeof HTMLIFrameElement !== 'undefined' && HTMLIFrameElement.prototype) {
+      var _origContentWinDesc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentWindow');
+      if (_origContentWinDesc && _origContentWinDesc.get) {
+        var _origContentWin = _origContentWinDesc.get;
+        Object.defineProperty(HTMLIFrameElement.prototype, 'contentWindow', {
+          get: disguise(function contentWindow() {
+            var win = _origContentWin.call(this);
+            sanitizeWindow(win);
+            return win;
+          }, 'get contentWindow'),
+          configurable: true, enumerable: true
+        });
+      }
+
+      var _origContentDocDesc = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'contentDocument');
+      if (_origContentDocDesc && _origContentDocDesc.get) {
+        var _origContentDoc = _origContentDocDesc.get;
+        Object.defineProperty(HTMLIFrameElement.prototype, 'contentDocument', {
+          get: disguise(function contentDocument() {
+            var doc = _origContentDoc.call(this);
+            if (doc && doc.defaultView) {
+              sanitizeWindow(doc.defaultView);
+            }
+            return doc;
+          }, 'get contentDocument'),
+          configurable: true, enumerable: true
+        });
+      }
+    }
+
+    if (typeof HTMLFrameElement !== 'undefined' && HTMLFrameElement.prototype) {
+      var _origFrameWinDesc = Object.getOwnPropertyDescriptor(HTMLFrameElement.prototype, 'contentWindow');
+      if (_origFrameWinDesc && _origFrameWinDesc.get) {
+        var _origFrameWin = _origFrameWinDesc.get;
+        Object.defineProperty(HTMLFrameElement.prototype, 'contentWindow', {
+          get: disguise(function contentWindow() {
+            var win = _origFrameWin.call(this);
+            sanitizeWindow(win);
+            return win;
+          }, 'get contentWindow'),
+          configurable: true, enumerable: true
+        });
+      }
+    }
+
     var _origCreateElement = Document.prototype.createElement;
     try { Object.defineProperty(Document.prototype, 'createElement', { configurable: true, enumerable: false, writable: true, value: disguise(function createElement(tag) {
       var el = _origCreateElement.apply(this, arguments);
@@ -891,21 +959,48 @@
         function patchIframeToString() {
           if (!patchPending) return;
           try {
-            if (origEl.contentWindow && origEl.contentWindow.Function) {
+            if (origEl.contentWindow) {
+              sanitizeWindow(origEl.contentWindow);
               patchPending = false;
-              origEl.contentWindow.Function.prototype.toString = Function.prototype.toString;
             }
-          } catch(e) {} // cross-origin — silently ignore
+          } catch(e) {}
         }
-        // Primary: load event fires when iframe content is ready
         _addEL.call(origEl, 'load', patchIframeToString, true);
-        // Fallbacks at various timings in case load already fired or is synchronous
         _setTimeout(patchIframeToString, 0);
         _setTimeout(patchIframeToString, 50);
-        _setTimeout(patchIframeToString, 200);
       }
       return el;
     }, 'createElement') }); } catch(e) {}
   } catch(e20) {}
 
+
+  // ═══════════════════════════════════════════════════════════════
+  // 18. REQUESTANIMATIONFRAME THROTTLING SMOOTHING
+  //     Prevents detection of background tab throttling / starvation
+  // ═══════════════════════════════════════════════════════════════
+  try {
+    if (typeof window.requestAnimationFrame === 'function') {
+      var _origRAF = window.requestAnimationFrame.bind(window);
+      var _lastSmoothedRafTime = 0;
+
+      window.requestAnimationFrame = disguise(function requestAnimationFrame(callback) {
+        if (typeof callback !== 'function') return _origRAF(callback);
+        return _origRAF(function(time) {
+          if (_lastSmoothedRafTime === 0) {
+            _lastSmoothedRafTime = time;
+          } else {
+            var delta = time - _lastSmoothedRafTime;
+            if (delta > 80) {
+              _lastSmoothedRafTime += 16.6 + Math.random() * 8;
+            } else {
+              _lastSmoothedRafTime = time;
+            }
+          }
+          return callback(_lastSmoothedRafTime);
+        });
+      }, 'requestAnimationFrame');
+    }
+  } catch(eRAF) {}
+
 })();
+

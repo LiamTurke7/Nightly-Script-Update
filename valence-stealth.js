@@ -1,4 +1,4 @@
-// Valence Stealth Engine v3.1.1 — Bypass Script
+// Valence Stealth Engine v3.1.2 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
 //
@@ -8,6 +8,7 @@
 // 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
 //
 // Changelog:
+// - v3.1.2 (2026-09-10): Standardized WebIDL prototype properties to enumerable: true, and removed instance shadowing for Window and Screen to pass runtime consistency tests.
 // - v3.1.1 (2026-09-10): Added search engine exemption filter to run native Firefox on Google/Bing and updated Chrome UA to stable release.
 // - v3.1.0 (2026-09-10): Standardized WebIDL prototype descriptors, reference equality, and Chrome-format function toString serialization.
 // - v3.0.0 (2026-09-10): Baseline Stealth Engine v3 release.
@@ -100,11 +101,11 @@
   // ═══════════════════════════════════════════════════════════════
   Object.defineProperty(Document.prototype, 'hidden', {
     get: disguise(function hidden() { return false; }, 'get hidden'),
-    configurable: true
+    configurable: true, enumerable: true
   });
   Object.defineProperty(Document.prototype, 'visibilityState', {
     get: disguise(function visibilityState() { return 'visible'; }, 'get visibilityState'),
-    configurable: true
+    configurable: true, enumerable: true
   });
   try { Object.defineProperty(Document.prototype, 'hasFocus', { configurable: true, enumerable: false, writable: true, value: disguise(function hasFocus() { return true; }, 'hasFocus') }); } catch(e) {}
 
@@ -134,8 +135,8 @@
 
   sizeOverrides.forEach(function(pair) {
     var getter = disguise(pair[1], 'get ' + pair[0]);
-    try { Object.defineProperty(Window.prototype, pair[0], { get: getter, configurable: true }); } catch(e) {}
-    try { Object.defineProperty(window, pair[0], { get: getter, configurable: true }); } catch(e) {}
+    try { delete window[pair[0]]; } catch(e) {}
+    try { Object.defineProperty(Window.prototype, pair[0], { get: getter, configurable: true, enumerable: true }); } catch(e) {}
   });
 
   var screenOverrides = [
@@ -147,13 +148,13 @@
 
   screenOverrides.forEach(function(pair) {
     var getter = disguise(pair[1], 'get ' + pair[0]);
-    try { Object.defineProperty(Screen.prototype, pair[0], { get: getter, configurable: true }); } catch(e) {}
-    try { if (window.screen) Object.defineProperty(window.screen, pair[0], { get: getter, configurable: true }); } catch(e) {}
+    try { if (window.screen) delete window.screen[pair[0]]; } catch(e) {}
+    try { Object.defineProperty(Screen.prototype, pair[0], { get: getter, configurable: true, enumerable: true }); } catch(e) {}
   });
 
   try {
     var dprGetter = disguise(function devicePixelRatio() { return 1; }, 'get devicePixelRatio');
-    
+    try { delete window.devicePixelRatio; } catch(e) {}
     Object.defineProperty(Window.prototype, 'devicePixelRatio', { get: dprGetter, configurable: true, enumerable: true });
   } catch(e) {}
 
@@ -226,19 +227,19 @@
   try {
     Object.defineProperty(Document.prototype, 'fullscreenEnabled', {
       get: disguise(function fullscreenEnabled() { return true; }, 'get fullscreenEnabled'),
-      configurable: true
+      configurable: true, enumerable: true
     });
   } catch(e) {}
   try {
     Object.defineProperty(Document.prototype, 'webkitFullscreenEnabled', {
       get: disguise(function webkitFullscreenEnabled() { return true; }, 'get webkitFullscreenEnabled'),
-      configurable: true
+      configurable: true, enumerable: true
     });
   } catch(e) {}
   try {
     Object.defineProperty(Document.prototype, 'mozFullScreenEnabled', {
       get: disguise(function mozFullScreenEnabled() { return true; }, 'get mozFullScreenEnabled'),
-      configurable: true
+      configurable: true, enumerable: true
     });
   } catch(e) {}
 
@@ -246,25 +247,25 @@
   try {
     Object.defineProperty(Document.prototype, 'fullscreenElement', {
       get: disguise(function fullscreenElement() { return _currentFullscreenElement; }, 'get fullscreenElement'),
-      configurable: true
+      configurable: true, enumerable: true
     });
   } catch(e) {}
   try {
     Object.defineProperty(Document.prototype, 'webkitFullscreenElement', {
       get: disguise(function webkitFullscreenElement() { return _currentFullscreenElement; }, 'get webkitFullscreenElement'),
-      configurable: true
+      configurable: true, enumerable: true
     });
   } catch(e) {}
   try {
     Object.defineProperty(Document.prototype, 'mozFullScreenElement', {
       get: disguise(function mozFullScreenElement() { return _currentFullscreenElement; }, 'get mozFullScreenElement'),
-      configurable: true
+      configurable: true, enumerable: true
     });
   } catch(e) {}
   try {
     Object.defineProperty(Document.prototype, 'msFullscreenElement', {
       get: disguise(function msFullscreenElement() { return _currentFullscreenElement; }, 'get msFullscreenElement'),
-      configurable: true
+      configurable: true, enumerable: true
     });
   } catch(e) {}
 
@@ -653,7 +654,7 @@
       try {
         Object.defineProperty(Navigator.prototype, pair[0], {
           get: disguise(pair[1], 'get ' + pair[0]),
-          configurable: true
+          configurable: true, enumerable: true
         });
       } catch(e12) {}
     });
@@ -736,7 +737,7 @@
 
       Object.defineProperty(Navigator.prototype, 'userAgentData', {
         get: disguise(function() { return _uaData; }, 'get userAgentData'),
-        configurable: true
+        configurable: true, enumerable: true
       });
     }
   } catch(e17) {}

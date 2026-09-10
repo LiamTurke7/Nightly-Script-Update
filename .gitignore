@@ -14,5 +14,6 @@
 # Allow the launcher scripts
 !launch-valence.bat
 !launch-valence.sh
+!launch-valence-silent.vbs
 !.gitignore
 !GEMINI.md

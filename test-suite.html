@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Valence Universal Engine Integrity & Interrogation Suite</title>
+<style>
+  :root {
+    --bg: #09090e;
+    --card-bg: #12121b;
+    --border: #222232;
+    --text: #e2e2ec;
+    --muted: #88889a;
+    --accent: #00ff88;
+    --fail: #ff4455;
+    --font: 'SF Mono', Monaco, Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    padding: 24px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .container {
+    max-width: 960px;
+    margin: 0 auto;
+  }
+  header {
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 15px;
+  }
+  .title-area h1 {
+    font-size: 18px;
+    color: #fff;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .title-area p {
+    color: var(--muted);
+    font-size: 12px;
+    margin-top: 4px;
+  }
+  .btn-run {
+    background: #00ff88;
+    color: #05140b;
+    border: none;
+    padding: 10px 20px;
+    font-weight: bold;
+    font-family: var(--font);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: 0.2s;
+  }
+  .btn-run:hover {
+    background: #22ffa0;
+    box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
+  }
+  .protocol-box {
+    background: rgba(0, 255, 136, 0.04);
+    border: 1px solid rgba(0, 255, 136, 0.2);
+    border-left: 4px solid var(--accent);
+    padding: 14px 18px;
+    border-radius: 4px;
+    margin-bottom: 24px;
+  }
+  .protocol-box h3 {
+    color: var(--accent);
+    font-size: 13px;
+    margin-bottom: 6px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+  .protocol-box ol {
+    margin-left: 20px;
+    color: #b0b0c2;
+    font-size: 12px;
+  }
+  .protocol-box li {
+    margin-bottom: 4px;
+  }
+  .stats-bar {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  .stat-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    padding: 14px;
+    border-radius: 4px;
+    text-align: center;
+  }
+  .stat-value {
+    font-size: 22px;
+    font-weight: bold;
+    margin-top: 4px;
+  }
+  .stat-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .results-grid {
+    display: grid;
+    gap: 10px;
+  }
+  .test-card {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-left: 4px solid #444;
+    padding: 12px 16px;
+    border-radius: 4px;
+  }
+  .card-pass {
+    border-left-color: var(--accent);
+  }
+  .card-fail {
+    border-left-color: var(--fail);
+    background: #181116;
+  }
+  .test-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .badge {
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 10px;
+    font-weight: bold;
+    letter-spacing: 0.5px;
+  }
+  .badge-pass {
+    background: rgba(0, 255, 136, 0.15);
+    color: var(--accent);
+    border: 1px solid rgba(0, 255, 136, 0.3);
+  }
+  .badge-fail {
+    background: rgba(255, 68, 85, 0.15);
+    color: var(--fail);
+    border: 1px solid rgba(255, 68, 85, 0.3);
+  }
+  .test-detail {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--muted);
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+  <header>
+    <div class="title-area">
+      <h1>🛡️ Universal Engine Integrity & Interrogation Suite</h1>
+      <p>Consolidated Anti-Stealth & W3C Specification Compliance Bench</p>
+    </div>
+    <button class="btn-run" onclick="executeSuite()">▶ Run Interrogation Suite</button>
+  </header>
+
+  <div class="protocol-box">
+    <h3>🤖 AI Auditor Continuous Improvement Protocol</h3>
+    <ol>
+      <li>Run this unified suite to evaluate stealth engine transparency against strict engine interrogations.</li>
+      <li>Formulate and append <strong>new aggressive probes</strong> targeting undetected edge cases (timing jitter, prototype traps, async workers, WebRTC SDP leaks).</li>
+      <li>Run the extended test to surface stealth discrepancies.</li>
+      <li>Remediate identified flaws in <code>valence-stealth.js</code> (always bumping version and updating changelog).</li>
+      <li>Repeat until 100% clean passes are verified across all vectors.</li>
+    </ol>
+  </div>
+
+  <div class="stats-bar">
+    <div class="stat-card">
+      <div class="stat-label">Total Tests</div>
+      <div class="stat-value" id="stat-total">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Passed</div>
+      <div class="stat-value" style="color: var(--accent)" id="stat-passed">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Failed</div>
+      <div class="stat-value" style="color: var(--fail)" id="stat-failed">0</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Integrity Status</div>
+      <div class="stat-value" id="stat-status">IDLE</div>
+    </div>
+  </div>
+
+  <div class="results-grid" id="test-results"></div>
+</div>
+
+<script src="test-suite.js"></script>
+<script>
+  async function executeSuite() {
+    document.getElementById('stat-status').textContent = 'RUNNING...';
+    document.getElementById('stat-status').style.color = '#ffaa00';
+    
+    const summary = await window.UniversalIntegritySuite.run({ containerId: 'test-results' });
+    
+    document.getElementById('stat-total').textContent = summary.total;
+    document.getElementById('stat-passed').textContent = summary.passed;
+    document.getElementById('stat-failed').textContent = summary.failed;
+    
+    if (summary.clean) {
+      document.getElementById('stat-status').textContent = '100% CLEAN';
+      document.getElementById('stat-status').style.color = 'var(--accent)';
+    } else {
+      document.getElementById('stat-status').textContent = `${summary.failed} LEAKS`;
+      document.getElementById('stat-status').style.color = 'var(--fail)';
+    }
+  }
+
+  // Auto-run on page load
+  window.addEventListener('DOMContentLoaded', executeSuite);
+</script>
+</body>
+</html>

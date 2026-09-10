@@ -17,3 +17,5 @@
 !launch-valence-silent.vbs
 !.gitignore
 !GEMINI.md
+!test-suite.js
+!test-suite.html

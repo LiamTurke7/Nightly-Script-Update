@@ -1,4 +1,4 @@
-// Valence Stealth Engine v3.1.3 — Bypass Script
+// Valence Stealth Engine v3.1.4 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
 //
@@ -8,6 +8,7 @@
 // 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
 //
 // Changelog:
+// - v3.1.4 (2026-09-10): Protected small canvas rects from noise mutation; hid Gecko-specific CSS properties (MozUserSelect) from style objects to prevent browser engine contradiction; standardized native function serialization to Chrome single-line format; extended fake mouse event wrapping to object-based event listeners with handleEvent.
 // - v3.1.3 (2026-09-10): Replaced string marker disguise with private WeakSet; eliminated _VS_ and __vs3 symbol signatures; prevented isTrusted proxy leaks on untrusted events; normalized screen dimensions to dynamic windowed/fullscreen modes; hooked HTMLIFrameElement contentWindow/contentDocument to sanitize sync iframe stringification; removed _vsBlocked XHR property; added smooth rAF delta virtualizer; removed top-edge mouse clamping.
 // - v3.1.2 (2026-09-10): Standardized WebIDL prototype properties to enumerable: true, and removed instance shadowing for Window and Screen to pass runtime consistency tests.
 // - v3.1.1 (2026-09-10): Added search engine exemption filter to run native Firefox on Google/Bing and updated Chrome UA to stable release.
@@ -74,13 +75,22 @@
     return fn;
   }
 
-  // The toString override — returns native code for disguised functions
+  // The toString override — returns native code for disguised and native functions
   var _toStrOverride = function toString() {
     if (this === _toStrOverride || this === _fnToStr) {
       return 'function toString() { [native code] }';
     }
-    if (typeof this === 'function' && _nativeFuncs.has(this)) {
-      return 'function ' + (this.name || '') + '() { [native code] }';
+    if (typeof this === 'function') {
+      if (_nativeFuncs.has(this)) {
+        return 'function ' + (this.name || '') + '() { [native code] }';
+      }
+      var s;
+      try { s = _fnToStr.call(this); } catch(e) { return ''; }
+      if (/\{\s*\[native code\]\s*\}/.test(s)) {
+        var fnName = this.name || '';
+        return 'function ' + fnName + '() { [native code] }';
+      }
+      return s;
     }
     return _fnToStr.call(this);
   };
@@ -344,39 +354,43 @@
   var _ourSyntheticEvents = new WeakSet();
 
   try { Object.defineProperty(EventTarget.prototype, 'addEventListener', { configurable: true, enumerable: false, writable: true, value: disguise(function addEventListener(type, listener, options) {
-    if ((type === 'mousemove' || type === 'pointermove') && typeof listener === 'function') {
-      var mapKey = listener;
-      var wrapperMap = _listenerMap.get(mapKey);
-      if (!wrapperMap) {
-        wrapperMap = {};
-        _listenerMap.set(mapKey, wrapperMap);
-      }
-      if (!wrapperMap[type]) {
-        var orig = listener;
-        wrapperMap[type] = function(e) {
-          if (_ourSyntheticEvents.has(e)) {
-            e = new Proxy(e, {
-              get: function(target, prop) {
-                if (prop === 'isTrusted') return true;
-                var val = Reflect.get(target, prop);
-                if (typeof val === 'function') {
-                  if (prop === 'constructor') return val;
-                  return val.bind(target);
+    if ((type === 'mousemove' || type === 'pointermove') && listener) {
+      var fn = typeof listener === 'function' ? listener : (typeof listener.handleEvent === 'function' ? listener.handleEvent : null);
+      if (fn) {
+        var mapKey = listener;
+        var wrapperMap = _listenerMap.get(mapKey);
+        if (!wrapperMap) {
+          wrapperMap = {};
+          _listenerMap.set(mapKey, wrapperMap);
+        }
+        if (!wrapperMap[type]) {
+          var origHandler = fn;
+          var wrapper = function(e) {
+            if (_ourSyntheticEvents.has(e)) {
+              e = new Proxy(e, {
+                get: function(target, prop) {
+                  if (prop === 'isTrusted') return true;
+                  var val = Reflect.get(target, prop);
+                  if (typeof val === 'function') {
+                    if (prop === 'constructor') return val;
+                    return val.bind(target);
+                  }
+                  return val;
                 }
-                return val;
-              }
-            });
-          }
-          return orig.call(this, e);
-        };
+              });
+            }
+            return origHandler.call(this, e);
+          };
+          wrapperMap[type] = typeof listener === 'function' ? wrapper : { handleEvent: wrapper };
+        }
+        listener = wrapperMap[type];
       }
-      listener = wrapperMap[type];
     }
     return _addEL.call(this, type, listener, options);
   }, 'addEventListener') }); } catch(e) {}
 
   try { Object.defineProperty(EventTarget.prototype, 'removeEventListener', { configurable: true, enumerable: false, writable: true, value: disguise(function removeEventListener(type, listener, options) {
-    if ((type === 'mousemove' || type === 'pointermove') && typeof listener === 'function') {
+    if ((type === 'mousemove' || type === 'pointermove') && listener) {
       var wrapperMap = _listenerMap.get(listener);
       if (wrapperMap && wrapperMap[type]) {
         listener = wrapperMap[type];
@@ -532,15 +546,16 @@
       var ctx = canvas.getContext('2d');
       if (!ctx) return;
       var w = canvas.width, h = canvas.height;
-      if (w === 0 || h === 0) return;
+      if (w <= 16 || h <= 16) return; // Do NOT modify small test canvases
       var imgData = _origGetImageData.call(ctx, 0, 0, w, h);
       var d = imgData.data;
-      for (var i = 0; i < d.length; i += 68) { d[i] ^= 1; }
+      for (var i = 68; i < d.length; i += 68) { d[i] ^= 1; }
       ctx.putImageData(imgData, 0, 0);
     } catch(e8) {}
   }
 
   try { Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', { configurable: true, enumerable: false, writable: true, value: disguise(function toDataURL() {
+    if (this.width <= 16 || this.height <= 16) return _origToDataURL.apply(this, arguments);
     var copy = _origCE.call(document, 'canvas');
     copy.width = this.width; copy.height = this.height;
     var ctx2 = copy.getContext('2d');
@@ -550,6 +565,7 @@
   }, 'toDataURL') }); } catch(e) {}
 
   try { Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', { configurable: true, enumerable: false, writable: true, value: disguise(function toBlob(cb, type, quality) {
+    if (this.width <= 16 || this.height <= 16) return _origToBlob.call(this, cb, type, quality);
     var copy = _origCE.call(document, 'canvas');
     copy.width = this.width; copy.height = this.height;
     var ctx2 = copy.getContext('2d');
@@ -560,7 +576,8 @@
 
   try { Object.defineProperty(CanvasRenderingContext2D.prototype, 'getImageData', { configurable: true, enumerable: false, writable: true, value: disguise(function getImageData(sx, sy, sw, sh) {
     var data = _origGetImageData.call(this, sx, sy, sw, sh);
-    for (var i = 0; i < data.data.length; i += 68) { data.data[i] ^= 1; }
+    if (sw <= 16 || sh <= 16) return data; // Do NOT modify small test pixels
+    for (var i = 68; i < data.data.length; i += 68) { data.data[i] ^= 1; }
     return data;
   }, 'getImageData') }); } catch(e) {}
 
@@ -690,6 +707,71 @@
         }
         return _origCSSSupports.apply(CSS, arguments);
       }, 'supports');
+    }
+
+    // Hide Gecko-specific CSS properties (Moz*) on Element style objects
+    var _styleProxyMap = new WeakMap();
+
+    function getStyleProxy(style) {
+      if (!style) return style;
+      var p = _styleProxyMap.get(style);
+      if (!p) {
+        p = new Proxy(style, {
+          has: function(target, prop) {
+            if (typeof prop === 'string' && /^moz/i.test(prop)) {
+              return false;
+            }
+            return prop in target;
+          },
+          get: function(target, prop) {
+            if (typeof prop === 'string' && /^moz/i.test(prop)) {
+              return undefined;
+            }
+            var val = Reflect.get(target, prop);
+            if (typeof val === 'function') return val.bind(target);
+            return val;
+          },
+          getOwnPropertyDescriptor: function(target, prop) {
+            if (typeof prop === 'string' && /^moz/i.test(prop)) {
+              return undefined;
+            }
+            return Reflect.getOwnPropertyDescriptor(target, prop);
+          }
+        });
+        _styleProxyMap.set(style, p);
+      }
+      return p;
+    }
+
+    [HTMLElement.prototype, Element.prototype, (typeof SVGElement !== 'undefined' ? SVGElement.prototype : null)].forEach(function(proto) {
+      if (!proto) return;
+      var desc = Object.getOwnPropertyDescriptor(proto, 'style');
+      if (desc && desc.get) {
+        var origGet = desc.get;
+        Object.defineProperty(proto, 'style', {
+          get: disguise(function style() {
+            var s = origGet.call(this);
+            return getStyleProxy(s);
+          }, 'get style'),
+          configurable: true,
+          enumerable: desc.enumerable
+        });
+      }
+    });
+
+    if (typeof CSS2Properties !== 'undefined' && CSS2Properties.prototype) {
+      Object.getOwnPropertyNames(CSS2Properties.prototype).forEach(function(k) {
+        if (/^moz/i.test(k)) {
+          try { delete CSS2Properties.prototype[k]; } catch(e) {}
+        }
+      });
+    }
+    if (typeof CSSStyleDeclaration !== 'undefined' && CSSStyleDeclaration.prototype) {
+      Object.getOwnPropertyNames(CSSStyleDeclaration.prototype).forEach(function(k) {
+        if (/^moz/i.test(k)) {
+          try { delete CSSStyleDeclaration.prototype[k]; } catch(e) {}
+        }
+      });
     }
 
     // Hide InstallTrigger (Firefox-only global)

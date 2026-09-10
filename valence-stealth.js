@@ -1,6 +1,15 @@
-// Valence Stealth Engine v3 — Bypass Script
+// Valence Stealth Engine v3.1.0 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
+//
+// ⚠️ MANDATORY RULE FOR ALL AIS AND DEVELOPERS:
+// Every single time this file is modified or updated:
+// 1. You MUST increment the version number above (e.g. v3.1.0 -> v3.1.1).
+// 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
+//
+// Changelog:
+// - v3.1.0 (2026-09-10): Standardized WebIDL prototype descriptors, reference equality, and Chrome-format function toString serialization.
+// - v3.0.0 (2026-09-10): Baseline Stealth Engine v3 release.
 
 (function() {
   'use strict';

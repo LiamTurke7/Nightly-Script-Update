@@ -344,6 +344,145 @@
         }
       } catch(e) { this.log('Display Integrity', 'Display Dimension Realism', false, e.message); }
 
+      // 13. Network Information (navigator.connection)
+      try {
+        const hasConn = 'connection' in navigator;
+        const conn = navigator.connection;
+        const validMetrics = conn && (conn.effectiveType === '4g') && (conn.saveData === false) && (typeof conn.rtt === 'number');
+        this.log('Network Information', 'navigator.connection 4G Metrics Emulated', hasConn && validMetrics, conn ? `effectiveType=${conn.effectiveType}, rtt=${conn.rtt}` : 'missing');
+      } catch(e) { this.log('Network Information', 'navigator.connection Check', false, e.message); }
+
+      // 14. Permissions API & Notification Alignment
+      try {
+        if (navigator.permissions && navigator.permissions.query) {
+          const status = await navigator.permissions.query({ name: 'notifications' });
+          const notifState = (typeof Notification !== 'undefined') ? Notification.permission : 'default';
+          const aligned = (status && status.state === 'prompt' && notifState === 'default');
+          this.log('Permissions API', 'Notification Permission Harmonized with Permissions.query', aligned, `query.state=${status ? status.state : 'null'}, Notification.permission=${notifState}`);
+        } else {
+          this.log('Permissions API', 'Notification Permission Harmonized with Permissions.query', true, 'Permissions API unavailable');
+        }
+      } catch(e) { this.log('Permissions API', 'Permissions API Notification Check', false, e.message); }
+
+      // 15. WebRTC SDP Offer Hardening (No unmasked private LAN IPs)
+      try {
+        const RTC = window.RTCPeerConnection || window.mozRTCPeerConnection;
+        if (RTC) {
+          const pc = new RTC();
+          if (pc.createOffer) {
+            const offer = await pc.createOffer();
+            const rawIPs = (offer && offer.sdp) ? offer.sdp.match(/(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)[0-9.]+/g) : null;
+            const clean = !rawIPs || rawIPs.every(ip => ip === '192.168.1.42');
+            this.log('WebRTC Security', 'WebRTC createOffer SDP Masked Private LAN IP', clean, rawIPs ? rawIPs.join(', ') : 'No host IPs in SDP');
+          }
+          try { pc.close(); } catch(x) {}
+        }
+      } catch(e) { this.log('WebRTC Security', 'WebRTC createOffer SDP Check', false, e.message); }
+
+      // 16. Dynamic srcdoc Container Isolation
+      try {
+        if (typeof document !== 'undefined' && document.body) {
+          const ifr = document.createElement('iframe');
+          ifr.srcdoc = '<html><body></body></html>';
+          ifr.style.display = 'none';
+          document.body.appendChild(ifr);
+          const win = ifr.contentWindow;
+          const cleanToStr = win ? (win.Function.prototype.toString === Function.prototype.toString) : true;
+          const cleanUA = win ? (win.navigator.userAgent === navigator.userAgent) : true;
+          this.log('DOM Container', 'Dynamic srcdoc Frame Inherits Sanitized Environment', cleanToStr && cleanUA, `cleanToStr=${cleanToStr}, cleanUA=${cleanUA}`);
+          document.body.removeChild(ifr);
+        }
+      } catch(e) { this.log('DOM Container', 'Dynamic srcdoc Frame Check', false, e.message); }
+
+      // 17. Device Memory API (navigator.deviceMemory)
+      try {
+        const claimsChrome = navigator.userAgent.includes('Chrome');
+        const hasDeviceMemory = 'deviceMemory' in navigator;
+        const isEight = (navigator.deviceMemory === 8);
+        const noInstanceShadow = !Object.prototype.hasOwnProperty.call(navigator, 'deviceMemory');
+        this.log('Device Memory', 'navigator.deviceMemory Standard Desktop 8GB RAM Emulated', claimsChrome ? (hasDeviceMemory && isEight && noInstanceShadow) : true, `deviceMemory=${navigator.deviceMemory}`);
+      } catch(e) { this.log('Device Memory', 'navigator.deviceMemory Check', false, e.message); }
+
+      // 18. Battery Status API (navigator.getBattery)
+      try {
+        const claimsChrome = navigator.userAgent.includes('Chrome');
+        const hasBattery = typeof navigator.getBattery === 'function';
+        if (claimsChrome && hasBattery) {
+          const bat = await navigator.getBattery();
+          const valid = bat && (bat.charging === true) && (bat.level === 1 || typeof bat.level === 'number');
+          this.log('Battery API', 'navigator.getBattery Supported & Resolves Cleanly', valid, `charging=${bat ? bat.charging : 'null'}, level=${bat ? bat.level : 'null'}`);
+        } else if (claimsChrome) {
+          this.log('Battery API', 'navigator.getBattery Supported & Resolves Cleanly', false, 'Missing navigator.getBattery');
+        } else {
+          this.log('Battery API', 'navigator.getBattery Supported & Resolves Cleanly', true, 'Not claiming Chrome');
+        }
+      } catch(e) { this.log('Battery API', 'navigator.getBattery Check', false, e.message); }
+
+      // 19. Notification.maxActions Chromium Constant
+      try {
+        const claimsChrome = navigator.userAgent.includes('Chrome');
+        if (claimsChrome && typeof Notification !== 'undefined') {
+          const isTwo = (Notification.maxActions === 2);
+          this.log('Notification API', 'Notification.maxActions Equals 2 in Chrome Environment', isTwo, `maxActions=${Notification.maxActions}`);
+        } else {
+          this.log('Notification API', 'Notification.maxActions Equals 2 in Chrome Environment', true, 'N/A');
+        }
+      } catch(e) { this.log('Notification API', 'Notification.maxActions Check', false, e.message); }
+
+      // 20. Deep window.chrome.app API Surface
+      try {
+        const hasApp = window.chrome && window.chrome.app;
+        const hasGetIsInstalled = hasApp && typeof window.chrome.app.getIsInstalled === 'function' && window.chrome.app.getIsInstalled() === false;
+        const hasGetDetails = hasApp && typeof window.chrome.app.getDetails === 'function' && window.chrome.app.getDetails() === null;
+        const hasInstallState = hasApp && typeof window.chrome.app.installState === 'function';
+        this.log('Chrome Namespace', 'window.chrome.app Deep Methods (getIsInstalled, getDetails, installState)', hasGetIsInstalled && hasGetDetails && hasInstallState, `getIsInstalled=${hasGetIsInstalled}`);
+      } catch(e) { this.log('Chrome Namespace', 'window.chrome.app Deep Methods Check', false, e.message); }
+
+      // 21. WebGL Debug Renderer Info Extension Resolution
+      try {
+        if (typeof document !== 'undefined') {
+          const canvas = document.createElement('canvas');
+          const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+          if (gl && gl.getExtension) {
+            const ext = gl.getExtension('WEBGL_debug_renderer_info');
+            const supported = gl.getSupportedExtensions ? gl.getSupportedExtensions() : [];
+            const hasExtInList = supported.includes('WEBGL_debug_renderer_info');
+            const validExtObj = ext && (ext.UNMASKED_VENDOR_WEBGL === 0x9245) && (ext.UNMASKED_RENDERER_WEBGL === 0x9246);
+            const vendor = gl.getParameter(0x9245);
+            const renderer = gl.getParameter(0x9246);
+            const maskedParams = (vendor === 'Google Inc. (Intel)') && (typeof renderer === 'string' && renderer.includes('ANGLE'));
+            this.log('WebGL Integrity', 'WEBGL_debug_renderer_info Extension & Masked Vendor Intact', validExtObj && hasExtInList && maskedParams, `vendor=${vendor}`);
+          } else {
+            this.log('WebGL Integrity', 'WEBGL_debug_renderer_info Extension & Masked Vendor Intact', true, 'WebGL not supported');
+          }
+        }
+      } catch(e) { this.log('WebGL Integrity', 'WebGL Debug Renderer Info Check', false, e.message); }
+
+      // 22. Chromium Hardware API Namespaces (usb, bluetooth, hid, serial)
+      try {
+        const claimsChrome = navigator.userAgent.includes('Chrome');
+        const hasUsb = 'usb' in navigator;
+        const hasBluetooth = 'bluetooth' in navigator;
+        const hasHid = 'hid' in navigator;
+        const hasSerial = 'serial' in navigator;
+        const allHardware = hasUsb && hasBluetooth && hasHid && hasSerial;
+        this.log('Hardware APIs', 'Chromium Hardware API Namespaces (usb, bluetooth, hid, serial)', claimsChrome ? allHardware : true, `usb=${hasUsb}, bluetooth=${hasBluetooth}, hid=${hasHid}, serial=${hasSerial}`);
+      } catch(e) { this.log('Hardware APIs', 'Hardware API Namespaces Check', false, e.message); }
+
+      // 23. Cross-Realm Container window.chrome Propagation
+      try {
+        if (typeof document !== 'undefined' && document.body) {
+          const ifr = document.createElement('iframe');
+          ifr.style.display = 'none';
+          document.body.appendChild(ifr);
+          const childWin = ifr.contentWindow;
+          const claimsChrome = navigator.userAgent.includes('Chrome');
+          const hasChildChrome = childWin && ('chrome' in childWin) && (typeof childWin.chrome === 'object');
+          this.log('Cross-Realm Propagation', 'Child <iframe> Context Inherits window.chrome', claimsChrome ? hasChildChrome : true);
+          document.body.removeChild(ifr);
+        }
+      } catch(e) { this.log('Cross-Realm Propagation', 'Child <iframe> window.chrome Check', false, e.message); }
+
       return this.summary();
     }
   };
@@ -392,7 +531,11 @@
             else if (this.fillStyle === 'rgb(100, 100, 100)') this.lastFill = [100, 100, 100, 255];
           }
         };
-        HTMLCanvasElement.prototype.getContext = function() {
+        HTMLCanvasElement.prototype.getContext = function(type) {
+          if (type === 'webgl' || type === 'experimental-webgl') {
+            if (!this._webgl) this._webgl = new window.WebGLRenderingContext();
+            return this._webgl;
+          }
           if (!this._ctx) this._ctx = new window.CanvasRenderingContext2D();
           return this._ctx;
         };
@@ -409,19 +552,33 @@
 
         window.AudioContext = class AudioContext { createAnalyser() { return new window.AnalyserNode(); } };
         window.webkitAudioContext = window.AudioContext;
-        window.WebGLRenderingContext = class WebGLRenderingContext { getParameter() {} };
-        window.WebGL2RenderingContext = class WebGL2RenderingContext { getParameter() {} };
+        window.WebGLRenderingContext = class WebGLRenderingContext { 
+          getParameter() { return null; }
+          getExtension(n) { return null; }
+          getSupportedExtensions() { return []; }
+        };
+        window.WebGL2RenderingContext = class WebGL2RenderingContext extends window.WebGLRenderingContext {};
         window.AnalyserNode = class AnalyserNode {
           getFloatFrequencyData(arr) { if (arr) arr.fill(-100); }
           getByteFrequencyData(arr) { if (arr) arr.fill(50); }
         };
-        window.RTCPeerConnection = class RTCPeerConnection { setLocalDescription() {} };
+        window.RTCPeerConnection = class RTCPeerConnection {
+          setLocalDescription() {}
+          createOffer() { return Promise.resolve({ sdp: 'c=IN IP4 192.168.1.100\\r\\n' }); }
+          createAnswer() { return Promise.resolve({ sdp: 'c=IN IP4 192.168.1.100\\r\\n' }); }
+          close() {}
+        };
         window.mozRTCPeerConnection = window.RTCPeerConnection;
         window.Performance = class Performance { now() { return 100; } };
         window.Screen = class Screen {};
         window.screen = new Screen();
         window.screen.width = 1920;
         window.screen.height = 1080;
+
+        window.navigator.permissions = {
+          query: function(d) { return Promise.resolve({ name: d.name, state: 'prompt' }); }
+        };
+        window.Notification = { permission: 'default' };
 
         CSSStyleDeclaration.prototype.MozUserSelect = 'none';
         delete window.Error.captureStackTrace;

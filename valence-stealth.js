@@ -1,4 +1,4 @@
-// Valence Stealth Engine v3.1.7 — Bypass Script
+// Valence Stealth Engine v3.1.9 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
 //
@@ -8,6 +8,8 @@
 // 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
 //
 // Changelog:
+// - v3.1.9 (2026-09-11): Emulated navigator.deviceMemory (8GB) and worker thread propagation; added Battery Status API (navigator.getBattery); aligned Notification.maxActions (=2); implemented deep window.chrome.app methods (getIsInstalled, getDetails, installState); emulated Chromium hardware APIs (usb, bluetooth, hid, serial); hooked WebGL getExtension and getSupportedExtensions for WEBGL_debug_renderer_info; propagated window.chrome to child container realms.
+// - v3.1.8 (2026-09-11): Added NetworkInformation (navigator.connection) with standard Chrome 4G metrics; harmonized Permissions API and Notification.permission state; hardened WebRTC createOffer, createAnswer, and localDescription SDP against early private LAN IP leakage.
 // - v3.1.7 (2026-09-11): Completely eliminated internal GUARD symbol on window; patched window.Reflect.ownKeys, window.Object.getOwnPropertySymbols, and window.Error.prototype across both Cu.Sandbox and page window contexts; added V8 stack formatting and captureStackTrace to all window error prototypes and container windows.
 // - v3.1.6 (2026-09-11): Added hardwareConcurrency and core navigator properties to Worker scope shim; neutralized AudioNode float and byte frequency mutations to preserve hardware audio float integrity; implemented Error.captureStackTrace and Error.stackTraceLimit for V8 stack API compatibility; enhanced sanitizeWindow and createElement to propagate navigator spoofing to <object> and iframe container windows.
 // - v3.1.5 (2026-09-10): Neutralized all canvas noise mutations to maintain raw pixel integrity; filtered internal symbols in Reflect.ownKeys; removed Element.style Proxy to restore native WebIDL C++ invocation; hooked HTMLObjectElement contentDocument; added V8 call stack formatting to Error.prototype.stack; shimmed Worker scope userAgent via createObjectURL.
@@ -615,6 +617,31 @@
         if (p === 0x8B8C) return 'WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)';
         return _origGetParam.call(this, p);
       }, 'getParameter') }); } catch(e) {}
+
+      if (GL.prototype.getExtension) {
+        var _origGetExt = GL.prototype.getExtension;
+        try { Object.defineProperty(GL.prototype, 'getExtension', { configurable: true, enumerable: false, writable: true, value: disguise(function getExtension(name) {
+          if (name === 'WEBGL_debug_renderer_info') {
+            return {
+              UNMASKED_VENDOR_WEBGL: UNMASKED_VENDOR,
+              UNMASKED_RENDERER_WEBGL: UNMASKED_RENDERER
+            };
+          }
+          return _origGetExt.call(this, name);
+        }, 'getExtension') }); } catch(eExt) {}
+      }
+
+      if (GL.prototype.getSupportedExtensions) {
+        var _origGetSupportedExt = GL.prototype.getSupportedExtensions;
+        try { Object.defineProperty(GL.prototype, 'getSupportedExtensions', { configurable: true, enumerable: false, writable: true, value: disguise(function getSupportedExtensions() {
+          var exts = _origGetSupportedExt.call(this) || [];
+          if (exts.indexOf('WEBGL_debug_renderer_info') === -1) {
+            exts = exts.slice();
+            exts.push('WEBGL_debug_renderer_info');
+          }
+          return exts;
+        }, 'getSupportedExtensions') }); } catch(eSupp) {}
+      }
     });
   } catch(e9) {}
 
@@ -648,18 +675,57 @@
   try {
     var RTC = window.RTCPeerConnection || window.mozRTCPeerConnection;
     if (RTC) {
+      var _sanitizeSdp = function(sdp) {
+        if (typeof sdp !== 'string') return sdp;
+        return sdp.replace(/([0-9]{1,3}(\.[0-9]{1,3}){3})/g, function(match) {
+          if (/^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(match)) return '192.168.1.42';
+          return match;
+        });
+      };
+
       var _origSLD = RTC.prototype.setLocalDescription;
       try { Object.defineProperty(RTC.prototype, 'setLocalDescription', { configurable: true, enumerable: false, writable: true, value: disguise(function setLocalDescription(desc) {
         if (desc && desc.sdp) {
-          desc = Object.assign({}, desc, {
-            sdp: desc.sdp.replace(/([0-9]{1,3}(\.[0-9]{1,3}){3})/g, function(match) {
-              if (/^(10\.|172\.(1[6-9]|2[0-9]|3[01])\.|192\.168\.)/.test(match)) return '192.168.1.42';
-              return match;
-            })
-          });
+          desc = Object.assign({}, desc, { sdp: _sanitizeSdp(desc.sdp) });
         }
         return _origSLD.call(this, desc);
       }, 'setLocalDescription') }); } catch(e) {}
+
+      if (RTC.prototype.createOffer) {
+        var _origCreateOffer = RTC.prototype.createOffer;
+        try { Object.defineProperty(RTC.prototype, 'createOffer', { configurable: true, enumerable: false, writable: true, value: disguise(function createOffer() {
+          return _origCreateOffer.apply(this, arguments).then(function(offer) {
+            if (offer && offer.sdp) {
+              return Object.assign({}, offer, { sdp: _sanitizeSdp(offer.sdp) });
+            }
+            return offer;
+          });
+        }, 'createOffer') }); } catch(e) {}
+      }
+
+      if (RTC.prototype.createAnswer) {
+        var _origCreateAnswer = RTC.prototype.createAnswer;
+        try { Object.defineProperty(RTC.prototype, 'createAnswer', { configurable: true, enumerable: false, writable: true, value: disguise(function createAnswer() {
+          return _origCreateAnswer.apply(this, arguments).then(function(ans) {
+            if (ans && ans.sdp) {
+              return Object.assign({}, ans, { sdp: _sanitizeSdp(ans.sdp) });
+            }
+            return ans;
+          });
+        }, 'createAnswer') }); } catch(e) {}
+      }
+
+      var _origLDDesc = Object.getOwnPropertyDescriptor(RTC.prototype, 'localDescription');
+      if (_origLDDesc && _origLDDesc.get) {
+        var _origLDGet = _origLDDesc.get;
+        try { Object.defineProperty(RTC.prototype, 'localDescription', { configurable: true, enumerable: true, get: disguise(function localDescription() {
+          var ld = _origLDGet.call(this);
+          if (ld && ld.sdp) {
+            return Object.assign({}, ld, { sdp: _sanitizeSdp(ld.sdp) });
+          }
+          return ld;
+        }, 'get localDescription') }); } catch(e) {}
+      }
     }
   } catch(e11) {}
 
@@ -672,6 +738,14 @@
 
     var _languages = Object.freeze(['en-US', 'en']);
 
+    var _networkInfo = {
+      downlink: 10,
+      effectiveType: '4g',
+      rtt: 50,
+      saveData: false,
+      onchange: null
+    };
+
     var navOverrides = [
       ['userAgent',    function() { return CHROME_UA; }],
       ['appVersion',   function() { return CHROME_UA.replace('Mozilla/', ''); }],
@@ -683,9 +757,11 @@
       ['language',     function() { return 'en-US'; }],
       ['languages',    function() { return _languages; }],
       ['hardwareConcurrency', function() { return 8; }],
+      ['deviceMemory',        function() { return 8; }],
       ['maxTouchPoints',      function() { return 0; }],
       ['pdfViewerEnabled',    function() { return true; }],
       ['webdriver',    function() { return false; }],
+      ['connection',   function() { return _networkInfo; }],
     ];
 
     navOverrides.forEach(function(pair) {
@@ -696,6 +772,106 @@
         });
       } catch(e12) {}
     });
+
+    // Battery Status API (navigator.getBattery)
+    var _batteryManager = {
+      charging: true,
+      chargingTime: 0,
+      dischargingTime: Infinity,
+      level: 1,
+      onchargingchange: null,
+      onchargingtimechange: null,
+      ondischargingtimechange: null,
+      onlevelchange: null,
+      addEventListener: disguise(function addEventListener() {}, 'addEventListener'),
+      removeEventListener: disguise(function removeEventListener() {}, 'removeEventListener'),
+      dispatchEvent: disguise(function dispatchEvent() { return true; }, 'dispatchEvent')
+    };
+
+    try {
+      Object.defineProperty(Navigator.prototype, 'getBattery', {
+        value: disguise(function getBattery() {
+          return Promise.resolve(_batteryManager);
+        }, 'getBattery'),
+        configurable: true, enumerable: true, writable: true
+      });
+    } catch(eBat) {}
+
+    // Chromium Hardware APIs (bluetooth, usb, hid, serial)
+    var _bluetoothObj = {
+      getAvailability: disguise(function getAvailability() { return Promise.resolve(false); }, 'getAvailability'),
+      requestDevice: disguise(function requestDevice() { return Promise.reject(new DOMException('User cancelled the requestDevice() chooser.', 'NotFoundError')); }, 'requestDevice'),
+      addEventListener: disguise(function addEventListener() {}, 'addEventListener'),
+      removeEventListener: disguise(function removeEventListener() {}, 'removeEventListener'),
+      dispatchEvent: disguise(function dispatchEvent() { return true; }, 'dispatchEvent')
+    };
+    var _usbObj = {
+      getDevices: disguise(function getDevices() { return Promise.resolve([]); }, 'getDevices'),
+      requestDevice: disguise(function requestDevice() { return Promise.reject(new DOMException('No device selected.', 'NotFoundError')); }, 'requestDevice'),
+      addEventListener: disguise(function addEventListener() {}, 'addEventListener'),
+      removeEventListener: disguise(function removeEventListener() {}, 'removeEventListener'),
+      dispatchEvent: disguise(function dispatchEvent() { return true; }, 'dispatchEvent')
+    };
+    var _hidObj = {
+      getDevices: disguise(function getDevices() { return Promise.resolve([]); }, 'getDevices'),
+      requestDevice: disguise(function requestDevice() { return Promise.reject(new DOMException('No device selected.', 'NotFoundError')); }, 'requestDevice'),
+      addEventListener: disguise(function addEventListener() {}, 'addEventListener'),
+      removeEventListener: disguise(function removeEventListener() {}, 'removeEventListener'),
+      dispatchEvent: disguise(function dispatchEvent() { return true; }, 'dispatchEvent')
+    };
+    var _serialObj = {
+      getPorts: disguise(function getPorts() { return Promise.resolve([]); }, 'getPorts'),
+      requestPort: disguise(function requestPort() { return Promise.reject(new DOMException('No port selected.', 'NotFoundError')); }, 'requestPort'),
+      addEventListener: disguise(function addEventListener() {}, 'addEventListener'),
+      removeEventListener: disguise(function removeEventListener() {}, 'removeEventListener'),
+      dispatchEvent: disguise(function dispatchEvent() { return true; }, 'dispatchEvent')
+    };
+
+    var hwOverrides = [
+      ['bluetooth', function() { return _bluetoothObj; }],
+      ['usb',       function() { return _usbObj; }],
+      ['hid',       function() { return _hidObj; }],
+      ['serial',    function() { return _serialObj; }]
+    ];
+
+    hwOverrides.forEach(function(pair) {
+      try {
+        Object.defineProperty(Navigator.prototype, pair[0], {
+          get: disguise(pair[1], 'get ' + pair[0]),
+          configurable: true, enumerable: true
+        });
+      } catch(eHw) {}
+    });
+
+    // Permissions API & Notification alignment
+    if (typeof navigator.permissions !== 'undefined' && navigator.permissions.query) {
+      var _origQuery = navigator.permissions.query.bind(navigator.permissions);
+      navigator.permissions.query = disguise(function query(desc) {
+        if (desc && desc.name === 'notifications') {
+          return Promise.resolve({
+            name: 'notifications',
+            state: 'prompt',
+            onchange: null
+          });
+        }
+        return _origQuery(desc);
+      }, 'query');
+    }
+
+    if (typeof Notification !== 'undefined') {
+      try {
+        Object.defineProperty(Notification, 'permission', {
+          get: disguise(function permission() { return 'default'; }, 'get permission'),
+          configurable: true, enumerable: true
+        });
+      } catch(eNotif) {}
+      try {
+        Object.defineProperty(Notification, 'maxActions', {
+          get: disguise(function maxActions() { return 2; }, 'get maxActions'),
+          configurable: true, enumerable: true
+        });
+      } catch(eNotif2) {}
+    }
 
     // Remove Firefox-specific properties
     ['buildID', 'oscpu', 'mozConnection'].forEach(function(prop) {
@@ -746,7 +922,14 @@
           csi: disguise(function() {
             return { startE: Date.now(), onloadT: Date.now(), pageT: 100, tran: 15 };
           }, 'csi'),
-          app: { isInstalled: false, InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' }, RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' } },
+          app: {
+            isInstalled: false,
+            InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' },
+            RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' },
+            getIsInstalled: disguise(function getIsInstalled() { return false; }, 'getIsInstalled'),
+            getDetails: disguise(function getDetails() { return null; }, 'getDetails'),
+            installState: disguise(function installState(cb) { if (typeof cb === 'function') cb('not_installed'); }, 'installState')
+          },
           runtime: {
             OnInstalledReason: { CHROME_UPDATE: 'chrome_update', INSTALL: 'install', SHARED_MODULE_UPDATE: 'shared_module_update', UPDATE: 'update' },
             PlatformOs: { ANDROID: 'android', CROS: 'cros', LINUX: 'linux', MAC: 'mac', OPENBSD: 'openbsd', WIN: 'win' },
@@ -969,6 +1152,14 @@
         }
       } catch(eOR) {}
       try {
+        if (!win.chrome && window.chrome) {
+          Object.defineProperty(win, 'chrome', {
+            value: window.chrome,
+            configurable: true, writable: true, enumerable: true
+          });
+        }
+      } catch(eWinChrome) {}
+      try {
         if (typeof patchErrorConstructors === 'function' && win.Error) {
           patchErrorConstructors(win);
         }
@@ -1117,6 +1308,7 @@
         '  Object.defineProperty(self.navigator, "platform", { get: function() { return "Win32"; }, configurable: true });',
         '  Object.defineProperty(self.navigator, "vendor", { get: function() { return "Google Inc."; }, configurable: true });',
         '  Object.defineProperty(self.navigator, "hardwareConcurrency", { get: function() { return 8; }, configurable: true });',
+        '  Object.defineProperty(self.navigator, "deviceMemory", { get: function() { return 8; }, configurable: true });',
         '} catch(e) {}'
       ].join('\n') + '\n';
     };

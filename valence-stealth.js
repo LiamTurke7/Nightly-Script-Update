@@ -62,9 +62,10 @@
   var _toStrOverride = function toString() {
     var s;
     try { s = _fnToStr.call(this); } catch(e) { return ''; }
-    if (s.indexOf('[native code]') >= 0) return s;
+    var ncode = '[native' + ' code]';
+    if (s.indexOf(ncode) >= 0) return s;
     if (s.indexOf('_VS_') >= 0) {
-      return 'function ' + (this.name || '') + '() {\n    [native code]\n}';
+      return 'function ' + (this.name || '') + '() {\n    ' + ncode + '\n}';
     }
     return s;
   };
@@ -141,10 +142,9 @@
   });
 
   try {
-    Object.defineProperty(window, 'devicePixelRatio', {
-      get: disguise(function devicePixelRatio() { return 1; }, 'get devicePixelRatio'),
-      configurable: true
-    });
+    var dprGetter = disguise(function devicePixelRatio() { return 1; }, 'get devicePixelRatio');
+    Object.defineProperty(window, 'devicePixelRatio', { get: dprGetter, configurable: true });
+    Object.defineProperty(Window.prototype, 'devicePixelRatio', { get: dprGetter, configurable: true });
   } catch(e) {}
 
 
@@ -338,7 +338,11 @@
               get: function(target, prop) {
                 if (prop === 'isTrusted') return true;
                 var val = Reflect.get(target, prop);
-                return typeof val === 'function' ? val.bind(target) : val;
+                if (typeof val === 'function') {
+                  if (prop === 'constructor') return val;
+                  return val.bind(target);
+                }
+                return val;
               }
             });
           }
@@ -448,8 +452,12 @@
   if (_fetch) {
     window.fetch = disguise(function fetch(input, init) {
       try {
-        var url = (typeof input === 'string') ? input : (input && input.url ? input.url : '');
-        if (EXT_RE.test(url)) {
+        var urlStr = '';
+        if (typeof input === 'string') { urlStr = input; }
+        else if (input && typeof input.url === 'string') { urlStr = input.url; }
+        else if (input && typeof input.toString === 'function') { urlStr = input.toString(); }
+        
+        if (EXT_RE.test(urlStr)) {
           return Promise.reject(new TypeError('NetworkError when attempting to fetch resource.'));
         }
       } catch(e6) {}
@@ -460,10 +468,13 @@
   // 7b. XMLHttpRequest
   XMLHttpRequest.prototype.open = disguise(function open(method, url) {
     this._vsBlocked = false;
-    if (typeof url === 'string' && EXT_RE.test(url)) {
-      this._vsBlocked = true;
-      return;
-    }
+    try {
+      var urlStr = (url && typeof url.toString === 'function') ? url.toString() : '';
+      if (EXT_RE.test(urlStr)) {
+        this._vsBlocked = true;
+        return;
+      }
+    } catch(e) {}
     return _xhrOpen.apply(this, arguments);
   }, 'open');
   XMLHttpRequest.prototype.send = disguise(function send() {
@@ -477,9 +488,12 @@
 
   // 7c. setAttribute — block extension resource probing
   Element.prototype.setAttribute = disguise(function setAttribute(name, value) {
-    if ((name === 'src' || name === 'href') && typeof value === 'string' && EXT_RE.test(value)) {
-      return;
-    }
+    try {
+      var valStr = (value !== null && value !== undefined && typeof value.toString === 'function') ? value.toString() : '';
+      if ((name === 'src' || name === 'href') && EXT_RE.test(valStr)) {
+        return;
+      }
+    } catch(e) {}
     return _setAttribute.call(this, name, value);
   }, 'setAttribute');
 
@@ -562,6 +576,16 @@
           arr[i] = arr[i] + 0.0001;
         }
       }, 'getFloatFrequencyData');
+      
+      if (AnalyserNode.prototype.getByteFrequencyData) {
+        var _origGetByte = AnalyserNode.prototype.getByteFrequencyData;
+        AnalyserNode.prototype.getByteFrequencyData = disguise(function getByteFrequencyData(arr) {
+          _origGetByte.call(this, arr);
+          for (var i = 0; i < arr.length; i += 7) {
+            arr[i] = (arr[i] + 1) % 256;
+          }
+        }, 'getByteFrequencyData');
+      }
     }
   } catch(e10) {}
 
@@ -597,6 +621,8 @@
   try {
     var CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.82 Safari/537.36';
 
+    var _languages = Object.freeze(['en-US', 'en']);
+
     var navOverrides = [
       ['userAgent',    function() { return CHROME_UA; }],
       ['appVersion',   function() { return CHROME_UA.replace('Mozilla/', ''); }],
@@ -606,7 +632,7 @@
       ['product',      function() { return 'Gecko'; }],
       ['productSub',   function() { return '20030107'; }],
       ['language',     function() { return 'en-US'; }],
-      ['languages',    function() { return Object.freeze(['en-US', 'en']); }],
+      ['languages',    function() { return _languages; }],
       ['hardwareConcurrency', function() { return 8; }],
       ['maxTouchPoints',      function() { return 0; }],
       ['pdfViewerEnabled',    function() { return true; }],
@@ -669,37 +695,37 @@
 
     // UserAgentData
     if (!navigator.userAgentData) {
-      Object.defineProperty(Navigator.prototype, 'userAgentData', {
-        get: disguise(function() {
-          return {
+      var _uaData = {
+        brands: [
+          { brand: 'Chromium', version: '152' },
+          { brand: 'Google Chrome', version: '152' },
+          { brand: 'Not:A-Brand', version: '24' }
+        ],
+        mobile: false,
+        platform: 'Windows',
+        getHighEntropyValues: disguise(function() {
+          return Promise.resolve({
+            architecture: 'x86', bitness: '64',
             brands: [
-              { brand: 'Chromium', version: '152' },
-              { brand: 'Google Chrome', version: '152' },
-              { brand: 'Not:A-Brand', version: '24' }
+              { brand: 'Chromium', version: '152.0.7977.82' },
+              { brand: 'Google Chrome', version: '152.0.7977.82' },
+              { brand: 'Not:A-Brand', version: '24.0.0.0' }
             ],
-            mobile: false,
-            platform: 'Windows',
-            getHighEntropyValues: disguise(function() {
-              return Promise.resolve({
-                architecture: 'x86', bitness: '64',
-                brands: [
-                  { brand: 'Chromium', version: '152.0.7977.82' },
-                  { brand: 'Google Chrome', version: '152.0.7977.82' },
-                  { brand: 'Not:A-Brand', version: '24.0.0.0' }
-                ],
-                fullVersionList: [
-                  { brand: 'Chromium', version: '152.0.7977.82' },
-                  { brand: 'Google Chrome', version: '152.0.7977.82' }
-                ],
-                mobile: false, model: '', platform: 'Windows',
-                platformVersion: '10.0.0', uaFullVersion: '152.0.7977.82'
-              });
-            }, 'getHighEntropyValues'),
-            toJSON: disguise(function() {
-              return { brands: this.brands, mobile: this.mobile, platform: this.platform };
-            }, 'toJSON')
-          };
-        }, 'get userAgentData'),
+            fullVersionList: [
+              { brand: 'Chromium', version: '152.0.7977.82' },
+              { brand: 'Google Chrome', version: '152.0.7977.82' }
+            ],
+            mobile: false, model: '', platform: 'Windows',
+            platformVersion: '10.0.0', uaFullVersion: '152.0.7977.82'
+          });
+        }, 'getHighEntropyValues'),
+        toJSON: disguise(function() {
+          return { brands: this.brands, mobile: this.mobile, platform: this.platform };
+        }, 'toJSON')
+      };
+
+      Object.defineProperty(Navigator.prototype, 'userAgentData', {
+        get: disguise(function() { return _uaData; }, 'get userAgentData'),
         configurable: true
       });
     }
@@ -713,32 +739,31 @@
     var pdfMime = { type: 'application/pdf', suffixes: 'pdf', description: 'Portable Document Format' };
     var pluginNames = ['PDF Viewer', 'Chrome PDF Viewer', 'Chromium PDF Viewer', 'Microsoft Edge PDF Viewer', 'WebKit built-in PDF'];
 
+    var _plugins = {
+      length: 5,
+      item: disguise(function item(i) { return this[i] || null; }, 'item'),
+      namedItem: disguise(function namedItem(n) { for (var i = 0; i < 5; i++) { if (this[i] && this[i].name === n) return this[i]; } return null; }, 'namedItem'),
+      refresh: disguise(function refresh() {}, 'refresh'),
+    };
+    _plugins[Symbol.iterator] = function*() { for (var i = 0; i < 5; i++) yield _plugins[i]; };
+    for (var i = 0; i < 5; i++) {
+      _plugins[i] = { name: pluginNames[i], filename: 'internal-pdf-viewer', description: 'Portable Document Format', length: 1, 0: pdfMime };
+    }
+
     Object.defineProperty(Navigator.prototype, 'plugins', {
-      get: disguise(function plugins() {
-        var p = {
-          length: 5,
-          item: disguise(function item(i) { return this[i] || null; }, 'item'),
-          namedItem: disguise(function namedItem(n) { for (var i = 0; i < 5; i++) { if (this[i] && this[i].name === n) return this[i]; } return null; }, 'namedItem'),
-          refresh: disguise(function refresh() {}, 'refresh'),
-        };
-        p[Symbol.iterator] = function*() { for (var i = 0; i < 5; i++) yield p[i]; };
-        for (var i = 0; i < 5; i++) {
-          p[i] = { name: pluginNames[i], filename: 'internal-pdf-viewer', description: 'Portable Document Format', length: 1, 0: pdfMime };
-        }
-        return p;
-      }, 'get plugins'),
+      get: disguise(function plugins() { return _plugins; }, 'get plugins'),
       configurable: true
     });
 
+    var _mimeTypes = {
+      0: pdfMime, length: 1,
+      item: disguise(function item(i) { return this[i] || null; }, 'item'),
+      namedItem: disguise(function namedItem(n) { return n === 'application/pdf' ? this[0] : null; }, 'namedItem'),
+      [Symbol.iterator]: function*() { yield pdfMime; }
+    };
+
     Object.defineProperty(Navigator.prototype, 'mimeTypes', {
-      get: disguise(function mimeTypes() {
-        return {
-          0: pdfMime, length: 1,
-          item: disguise(function item(i) { return this[i] || null; }, 'item'),
-          namedItem: disguise(function namedItem(n) { return n === 'application/pdf' ? this[0] : null; }, 'namedItem'),
-          [Symbol.iterator]: function*() { yield pdfMime; }
-        };
-      }, 'get mimeTypes'),
+      get: disguise(function mimeTypes() { return _mimeTypes; }, 'get mimeTypes'),
       configurable: true
     });
   } catch(e18) {}

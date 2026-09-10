@@ -1,4 +1,4 @@
-// Valence Stealth Engine v3.1.5 — Bypass Script
+// Valence Stealth Engine v3.1.6 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
 //
@@ -8,6 +8,7 @@
 // 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
 //
 // Changelog:
+// - v3.1.6 (2026-09-11): Added hardwareConcurrency and core navigator properties to Worker scope shim; neutralized AudioNode float and byte frequency mutations to preserve hardware audio float integrity; implemented Error.captureStackTrace and Error.stackTraceLimit for V8 stack API compatibility; enhanced sanitizeWindow and createElement to propagate navigator spoofing to <object> and iframe container windows.
 // - v3.1.5 (2026-09-10): Neutralized all canvas noise mutations to maintain raw pixel integrity; filtered internal symbols in Reflect.ownKeys; removed Element.style Proxy to restore native WebIDL C++ invocation; hooked HTMLObjectElement contentDocument; added V8 call stack formatting to Error.prototype.stack; shimmed Worker scope userAgent via createObjectURL.
 // - v3.1.4 (2026-09-10): Protected small canvas rects from noise mutation; hid Gecko-specific CSS properties (MozUserSelect) from style objects to prevent browser engine contradiction; standardized native function serialization to Chrome single-line format; extended fake mouse event wrapping to object-based event listeners with handleEvent.
 // - v3.1.3 (2026-09-10): Replaced string marker disguise with private WeakSet; eliminated _VS_ and __vs3 symbol signatures; prevented isTrusted proxy leaks on untrusted events; normalized screen dimensions to dynamic windowed/fullscreen modes; hooked HTMLIFrameElement contentWindow/contentDocument to sanitize sync iframe stringification; removed _vsBlocked XHR property; added smooth rAF delta virtualizer; removed top-edge mouse clamping.
@@ -597,25 +598,19 @@
 
 
   // ═══════════════════════════════════════════════════════════════
-  // 10. AUDIO FINGERPRINT PROTECTION (deterministic)
+  // 10. AUDIO FINGERPRINT PROTECTION (hardware baseline integrity)
   // ═══════════════════════════════════════════════════════════════
   try {
     if (typeof AnalyserNode !== 'undefined') {
       var _origGetFloat = AnalyserNode.prototype.getFloatFrequencyData;
       try { Object.defineProperty(AnalyserNode.prototype, 'getFloatFrequencyData', { configurable: true, enumerable: false, writable: true, value: disguise(function getFloatFrequencyData(arr) {
-        _origGetFloat.call(this, arr);
-        for (var i = 0; i < arr.length; i += 7) {
-          arr[i] = arr[i] + 0.0001;
-        }
+        return _origGetFloat.call(this, arr);
       }, 'getFloatFrequencyData') }); } catch(e) {}
       
       if (AnalyserNode.prototype.getByteFrequencyData) {
         var _origGetByte = AnalyserNode.prototype.getByteFrequencyData;
         try { Object.defineProperty(AnalyserNode.prototype, 'getByteFrequencyData', { configurable: true, enumerable: false, writable: true, value: disguise(function getByteFrequencyData(arr) {
-          _origGetByte.call(this, arr);
-          for (var i = 0; i < arr.length; i += 7) {
-            arr[i] = (arr[i] + 1) % 256;
-          }
+          return _origGetByte.call(this, arr);
         }, 'getByteFrequencyData') }); } catch(e) {}
       }
     }
@@ -926,6 +921,26 @@
           win.Function.prototype.toString = _toStrOverride;
         }
       } catch(e) {}
+      try {
+        if (win.Navigator && win.Navigator.prototype) {
+          navOverrides.forEach(function(pair) {
+            try {
+              Object.defineProperty(win.Navigator.prototype, pair[0], {
+                get: disguise(pair[1], 'get ' + pair[0]),
+                configurable: true, enumerable: true
+              });
+            } catch(e) {}
+          });
+        }
+        if (win.navigator) {
+          try {
+            Object.defineProperty(win.navigator, 'userAgent', {
+              get: disguise(function() { return CHROME_UA; }, 'get userAgent'),
+              configurable: true, enumerable: true
+            });
+          } catch(e) {}
+        }
+      } catch(eNav) {}
     }
 
     if (typeof HTMLIFrameElement !== 'undefined' && HTMLIFrameElement.prototype) {
@@ -988,26 +1003,41 @@
           configurable: true, enumerable: true
         });
       }
+      var _origObjWinDesc = Object.getOwnPropertyDescriptor(HTMLObjectElement.prototype, 'contentWindow');
+      if (_origObjWinDesc && _origObjWinDesc.get) {
+        var _origObjWin = _origObjWinDesc.get;
+        Object.defineProperty(HTMLObjectElement.prototype, 'contentWindow', {
+          get: disguise(function contentWindow() {
+            var win = _origObjWin.call(this);
+            if (win) sanitizeWindow(win);
+            return win;
+          }, 'get contentWindow'),
+          configurable: true, enumerable: true
+        });
+      }
     }
 
     var _origCreateElement = Document.prototype.createElement;
     try { Object.defineProperty(Document.prototype, 'createElement', { configurable: true, enumerable: false, writable: true, value: disguise(function createElement(tag) {
       var el = _origCreateElement.apply(this, arguments);
-      if (tag && tag.toLowerCase() === 'iframe') {
-        var patchPending = true;
-        var origEl = el;
-        function patchIframeToString() {
-          if (!patchPending) return;
-          try {
-            if (origEl.contentWindow) {
-              sanitizeWindow(origEl.contentWindow);
-              patchPending = false;
-            }
-          } catch(e) {}
+      if (tag) {
+        var lowerTag = tag.toLowerCase();
+        if (lowerTag === 'iframe' || lowerTag === 'object' || lowerTag === 'embed' || lowerTag === 'frame') {
+          var patchPending = true;
+          var origEl = el;
+          function patchContainer() {
+            try {
+              var win = origEl.contentWindow || (origEl.contentDocument && origEl.contentDocument.defaultView);
+              if (win) {
+                sanitizeWindow(win);
+                patchPending = false;
+              }
+            } catch(e) {}
+          }
+          _addEL.call(origEl, 'load', patchContainer, true);
+          _setTimeout(patchContainer, 0);
+          _setTimeout(patchContainer, 50);
         }
-        _addEL.call(origEl, 'load', patchIframeToString, true);
-        _setTimeout(patchIframeToString, 0);
-        _setTimeout(patchIframeToString, 50);
       }
       return el;
     }, 'createElement') }); } catch(e) {}
@@ -1044,15 +1074,27 @@
 
 
   // ═══════════════════════════════════════════════════════════════
-  // 19. WEB WORKER USERAGENT SPOOFING
+  // 19. WEB WORKER USERAGENT & CONCURRENCY SPOOFING
   // ═══════════════════════════════════════════════════════════════
   try {
+    var _buildWorkerShim = function() {
+      return [
+        'try {',
+        '  Object.defineProperty(self.navigator, "userAgent", { get: function() { return "' + CHROME_UA + '"; }, configurable: true });',
+        '  Object.defineProperty(self.navigator, "appVersion", { get: function() { return "' + CHROME_UA.replace('Mozilla/', '') + '"; }, configurable: true });',
+        '  Object.defineProperty(self.navigator, "platform", { get: function() { return "Win32"; }, configurable: true });',
+        '  Object.defineProperty(self.navigator, "vendor", { get: function() { return "Google Inc."; }, configurable: true });',
+        '  Object.defineProperty(self.navigator, "hardwareConcurrency", { get: function() { return 8; }, configurable: true });',
+        '} catch(e) {}'
+      ].join('\n') + '\n';
+    };
+
     if (typeof window.URL !== 'undefined' && typeof window.URL.createObjectURL === 'function') {
       var _origCreateObjectURL = window.URL.createObjectURL.bind(window.URL);
       window.URL.createObjectURL = disguise(function createObjectURL(blob) {
-        if (blob && (blob.type === 'application/javascript' || blob.type === 'text/javascript' || blob.type === '')) {
+        if (blob && typeof blob === 'object' && (!blob.type || /javascript|ecmascript/i.test(blob.type) || blob.type === 'text/plain')) {
           try {
-            var workerShim = 'try { Object.defineProperty(self.navigator, "userAgent", { get: function() { return "' + CHROME_UA + '"; }, configurable: true }); } catch(e) {}\n';
+            var workerShim = _buildWorkerShim();
             var newBlob = new Blob([workerShim, blob], { type: blob.type || 'application/javascript' });
             return _origCreateObjectURL(newBlob);
           } catch(eB) {}
@@ -1075,8 +1117,8 @@
             xhr.send();
             if (xhr.status === 200 || xhr.responseText) {
               var code = xhr.responseText;
-              if (code.indexOf(CHROME_UA) === -1) {
-                var workerShim = 'try { Object.defineProperty(self.navigator, "userAgent", { get: function() { return "' + CHROME_UA + '"; }, configurable: true }); } catch(e) {}\n';
+              if (code.indexOf('hardwareConcurrency') === -1 || code.indexOf(CHROME_UA) === -1) {
+                var workerShim = _buildWorkerShim();
                 var patchedBlob = new Blob([workerShim, code], { type: 'application/javascript' });
                 targetURL = URL.createObjectURL(patchedBlob);
               }
@@ -1095,7 +1137,7 @@
 
 
   // ═══════════════════════════════════════════════════════════════
-  // 20. V8 ERROR CALL STACK FORMATTING
+  // 20. V8 ERROR CALL STACK FORMATTING & API
   // ═══════════════════════════════════════════════════════════════
   try {
     function formatStackToV8(err, rawStack) {
@@ -1123,18 +1165,65 @@
     }
 
     var _origErrorStackDesc = Object.getOwnPropertyDescriptor(Error.prototype, 'stack');
-    if (_origErrorStackDesc && _origErrorStackDesc.get) {
-      var _origStackGet = _origErrorStackDesc.get;
-      var _origStackSet = _origErrorStackDesc.set;
-      Object.defineProperty(Error.prototype, 'stack', {
-        get: disguise(function stack() {
-          var raw = _origStackGet.call(this);
-          return formatStackToV8(this, raw);
-        }, 'get stack'),
-        set: _origStackSet ? function(val) { return _origStackSet.call(this, val); } : undefined,
+    var _origStackGet = _origErrorStackDesc ? _origErrorStackDesc.get : null;
+    var _origStackSet = _origErrorStackDesc ? _origErrorStackDesc.set : null;
+    Object.defineProperty(Error.prototype, 'stack', {
+      get: disguise(function stack() {
+        var raw = _origStackGet ? _origStackGet.call(this) : (this.__rawStack__ || '');
+        return formatStackToV8(this, raw);
+      }, 'get stack'),
+      set: disguise(function stack(val) {
+        if (_origStackSet) {
+          return _origStackSet.call(this, val);
+        }
+        this.__rawStack__ = val;
+      }, 'set stack'),
+      configurable: true,
+      enumerable: false
+    });
+
+    if (typeof Error.captureStackTrace === 'undefined') {
+      var captureStackTrace = function captureStackTrace(targetObject, constructorOpt) {
+        if (!targetObject || typeof targetObject !== 'object') return;
+        var dummy = new Error();
+        var rawStack = dummy.stack;
+        Object.defineProperty(targetObject, 'stack', {
+          get: function() {
+            var s = typeof rawStack === 'string' ? rawStack : (dummy.stack || '');
+            if (constructorOpt && typeof constructorOpt === 'function') {
+              var name = constructorOpt.name;
+              if (name) {
+                var lines = s.split('\n');
+                var idx = -1;
+                for (var i = 0; i < lines.length; i++) {
+                  if (lines[i].indexOf(name) !== -1) {
+                    idx = i;
+                    break;
+                  }
+                }
+                if (idx !== -1) {
+                  s = [lines[0]].concat(lines.slice(idx + 1)).join('\n');
+                }
+              }
+            }
+            return s;
+          },
+          set: function(val) {
+            Object.defineProperty(targetObject, 'stack', { value: val, writable: true, configurable: true, enumerable: true });
+          },
+          configurable: true,
+          enumerable: false
+        });
+      };
+      Object.defineProperty(Error, 'captureStackTrace', {
+        value: disguise(captureStackTrace, 'captureStackTrace'),
         configurable: true,
+        writable: true,
         enumerable: false
       });
+    }
+    if (typeof Error.stackTraceLimit === 'undefined') {
+      Error.stackTraceLimit = 10;
     }
   } catch(eStack) {}
 

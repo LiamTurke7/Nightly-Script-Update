@@ -53,8 +53,8 @@
   function disguise(fn, name) {
     // Wrap fn so that the wrapper's source code contains '_VS_'
     var w = function() { void _VS_; return fn.apply(this, arguments); };
-    try { Object.defineProperty(w, 'name', { value: name, configurable: true }); } catch(e) {}
-    try { Object.defineProperty(w, 'length', { value: fn.length || 0, configurable: true }); } catch(e) {}
+    try { Object.defineProperty(w, 'name', { value: name, configurable: true, enumerable: true }); } catch(e) {}
+    try { Object.defineProperty(w, 'length', { value: fn.length || 0, configurable: true, enumerable: true }); } catch(e) {}
     return w;
   }
 
@@ -65,7 +65,7 @@
     var ncode = '[native' + ' code]';
     if (s.indexOf(ncode) >= 0) return s;
     if (s.indexOf('_VS_') >= 0) {
-      return 'function ' + (this.name || '') + '() {\n    ' + ncode + '\n}';
+      return 'function ' + (this.name || '') + '() { ' + ncode + ' }';
     }
     return s;
   };
@@ -87,18 +87,9 @@
     get: disguise(function visibilityState() { return 'visible'; }, 'get visibilityState'),
     configurable: true
   });
-  Document.prototype.hasFocus = disguise(function hasFocus() { return true; }, 'hasFocus');
+  try { Object.defineProperty(Document.prototype, 'hasFocus', { configurable: true, enumerable: false, writable: true, value: disguise(function hasFocus() { return true; }, 'hasFocus') }); } catch(e) {}
 
-  try {
-    Object.defineProperty(document, 'hidden', {
-      get: disguise(function hidden() { return false; }, 'get hidden'),
-      configurable: true
-    });
-    Object.defineProperty(document, 'visibilityState', {
-      get: disguise(function visibilityState() { return 'visible'; }, 'get visibilityState'),
-      configurable: true
-    });
-  } catch(e) {}
+  
 
 
   // ═══════════════════════════════════════════════════════════════
@@ -143,8 +134,8 @@
 
   try {
     var dprGetter = disguise(function devicePixelRatio() { return 1; }, 'get devicePixelRatio');
-    Object.defineProperty(window, 'devicePixelRatio', { get: dprGetter, configurable: true });
-    Object.defineProperty(Window.prototype, 'devicePixelRatio', { get: dprGetter, configurable: true });
+    
+    Object.defineProperty(Window.prototype, 'devicePixelRatio', { get: dprGetter, configurable: true, enumerable: true });
   } catch(e) {}
 
 
@@ -184,33 +175,33 @@
     return Promise.resolve();
   }
 
-  Element.prototype.requestFullscreen = disguise(function requestFullscreen() {
+  try { Object.defineProperty(Element.prototype, 'requestFullscreen', { configurable: true, enumerable: false, writable: true, value: disguise(function requestFullscreen() {
     return _enterFullscreen(this);
-  }, 'requestFullscreen');
-  Element.prototype.mozRequestFullScreen = disguise(function mozRequestFullScreen() {
+  }, 'requestFullscreen') }); } catch(e) {}
+  try { Object.defineProperty(Element.prototype, 'mozRequestFullScreen', { configurable: true, enumerable: false, writable: true, value: disguise(function mozRequestFullScreen() {
     return _enterFullscreen(this);
-  }, 'mozRequestFullScreen');
-  Element.prototype.mozRequestFullscreen = disguise(function mozRequestFullscreen() {
+  }, 'mozRequestFullScreen') }); } catch(e) {}
+  try { Object.defineProperty(Element.prototype, 'mozRequestFullscreen', { configurable: true, enumerable: false, writable: true, value: disguise(function mozRequestFullscreen() {
     return _enterFullscreen(this);
-  }, 'mozRequestFullscreen');
-  Element.prototype.webkitRequestFullscreen = disguise(function webkitRequestFullscreen() {
+  }, 'mozRequestFullscreen') }); } catch(e) {}
+  try { Object.defineProperty(Element.prototype, 'webkitRequestFullscreen', { configurable: true, enumerable: false, writable: true, value: disguise(function webkitRequestFullscreen() {
     return _enterFullscreen(this);
-  }, 'webkitRequestFullscreen');
-  Element.prototype.msRequestFullscreen = disguise(function msRequestFullscreen() {
+  }, 'webkitRequestFullscreen') }); } catch(e) {}
+  try { Object.defineProperty(Element.prototype, 'msRequestFullscreen', { configurable: true, enumerable: false, writable: true, value: disguise(function msRequestFullscreen() {
     return _enterFullscreen(this);
-  }, 'msRequestFullscreen');
-  Document.prototype.exitFullscreen = disguise(function exitFullscreen() {
+  }, 'msRequestFullscreen') }); } catch(e) {}
+  try { Object.defineProperty(Document.prototype, 'exitFullscreen', { configurable: true, enumerable: false, writable: true, value: disguise(function exitFullscreen() {
     return _exitFullscreen();
-  }, 'exitFullscreen');
-  Document.prototype.mozCancelFullScreen = disguise(function mozCancelFullScreen() {
+  }, 'exitFullscreen') }); } catch(e) {}
+  try { Object.defineProperty(Document.prototype, 'mozCancelFullScreen', { configurable: true, enumerable: false, writable: true, value: disguise(function mozCancelFullScreen() {
     return _exitFullscreen();
-  }, 'mozCancelFullScreen');
-  Document.prototype.webkitExitFullscreen = disguise(function webkitExitFullscreen() {
+  }, 'mozCancelFullScreen') }); } catch(e) {}
+  try { Object.defineProperty(Document.prototype, 'webkitExitFullscreen', { configurable: true, enumerable: false, writable: true, value: disguise(function webkitExitFullscreen() {
     return _exitFullscreen();
-  }, 'webkitExitFullscreen');
-  Document.prototype.msExitFullscreen = disguise(function msExitFullscreen() {
+  }, 'webkitExitFullscreen') }); } catch(e) {}
+  try { Object.defineProperty(Document.prototype, 'msExitFullscreen', { configurable: true, enumerable: false, writable: true, value: disguise(function msExitFullscreen() {
     return _exitFullscreen();
-  }, 'msExitFullscreen');
+  }, 'msExitFullscreen') }); } catch(e) {}
 
   // Override fullscreenEnabled to true
   try {
@@ -295,12 +286,12 @@
       if (nx > w - SIDE_MARGIN) { nx = w - SIDE_MARGIN; clamped = true; }
       if (clamped) {
         try {
-          Object.defineProperty(e, 'clientX', { value: nx, configurable: true });
-          Object.defineProperty(e, 'clientY', { value: ny, configurable: true });
-          Object.defineProperty(e, 'pageX',   { value: nx + (window.scrollX || 0), configurable: true });
-          Object.defineProperty(e, 'pageY',   { value: ny + (window.scrollY || 0), configurable: true });
-          Object.defineProperty(e, 'screenX', { value: nx, configurable: true });
-          Object.defineProperty(e, 'screenY', { value: ny, configurable: true });
+          Object.defineProperty(e, 'clientX', { value: nx, configurable: true, enumerable: true });
+          Object.defineProperty(e, 'clientY', { value: ny, configurable: true, enumerable: true });
+          Object.defineProperty(e, 'pageX',   { value: nx + (window.scrollX || 0), configurable: true, enumerable: true });
+          Object.defineProperty(e, 'pageY',   { value: ny + (window.scrollY || 0), configurable: true, enumerable: true });
+          Object.defineProperty(e, 'screenX', { value: nx, configurable: true, enumerable: true });
+          Object.defineProperty(e, 'screenY', { value: ny, configurable: true, enumerable: true });
         } catch(er) { e.stopImmediatePropagation(); }
       }
     } catch(e2) {}
@@ -321,7 +312,7 @@
   //     Use a WeakMap to track original→wrapper so removeEventListener works.
   var _listenerMap = new WeakMap();
 
-  EventTarget.prototype.addEventListener = disguise(function addEventListener(type, listener, options) {
+  try { Object.defineProperty(EventTarget.prototype, 'addEventListener', { configurable: true, enumerable: false, writable: true, value: disguise(function addEventListener(type, listener, options) {
     if ((type === 'mousemove' || type === 'pointermove') && typeof listener === 'function') {
       // Check if we already have a wrapper for this listener
       var mapKey = listener;
@@ -352,9 +343,9 @@
       listener = wrapperMap[type];
     }
     return _addEL.call(this, type, listener, options);
-  }, 'addEventListener');
+  }, 'addEventListener') }); } catch(e) {}
 
-  EventTarget.prototype.removeEventListener = disguise(function removeEventListener(type, listener, options) {
+  try { Object.defineProperty(EventTarget.prototype, 'removeEventListener', { configurable: true, enumerable: false, writable: true, value: disguise(function removeEventListener(type, listener, options) {
     if ((type === 'mousemove' || type === 'pointermove') && typeof listener === 'function') {
       var wrapperMap = _listenerMap.get(listener);
       if (wrapperMap && wrapperMap[type]) {
@@ -362,7 +353,7 @@
       }
     }
     return _removeEL.call(this, type, listener, options);
-  }, 'removeEventListener');
+  }, 'removeEventListener') }); } catch(e) {}
 
   // 5b. Fake mouse movement engine
   var _fakeInterval = null;
@@ -450,7 +441,7 @@
 
   // 7a. fetch()
   if (_fetch) {
-    window.fetch = disguise(function fetch(input, init) {
+    try { Object.defineProperty(window, 'fetch', { configurable: true, enumerable: false, writable: true, value: disguise(function fetch(input, init) {
       try {
         var urlStr = '';
         if (typeof input === 'string') { urlStr = input; }
@@ -462,11 +453,11 @@
         }
       } catch(e6) {}
       return _fetch(input, init);
-    }, 'fetch');
+    }, 'fetch') }); } catch(e) {}
   }
 
   // 7b. XMLHttpRequest
-  XMLHttpRequest.prototype.open = disguise(function open(method, url) {
+  try { Object.defineProperty(XMLHttpRequest.prototype, 'open', { configurable: true, enumerable: false, writable: true, value: disguise(function open(method, url) {
     this._vsBlocked = false;
     try {
       var urlStr = (url && typeof url.toString === 'function') ? url.toString() : '';
@@ -476,18 +467,18 @@
       }
     } catch(e) {}
     return _xhrOpen.apply(this, arguments);
-  }, 'open');
-  XMLHttpRequest.prototype.send = disguise(function send() {
+  }, 'open') }); } catch(e) {}
+  try { Object.defineProperty(XMLHttpRequest.prototype, 'send', { configurable: true, enumerable: false, writable: true, value: disguise(function send() {
     if (this._vsBlocked) {
       var self = this;
       _setTimeout(function() { try { self.dispatchEvent(new Event('error')); } catch(e7) {} }, 0);
       return;
     }
     return _xhrSend.apply(this, arguments);
-  }, 'send');
+  }, 'send') }); } catch(e) {}
 
   // 7c. setAttribute — block extension resource probing
-  Element.prototype.setAttribute = disguise(function setAttribute(name, value) {
+  try { Object.defineProperty(Element.prototype, 'setAttribute', { configurable: true, enumerable: false, writable: true, value: disguise(function setAttribute(name, value) {
     try {
       var valStr = (value !== null && value !== undefined && typeof value.toString === 'function') ? value.toString() : '';
       if ((name === 'src' || name === 'href') && EXT_RE.test(valStr)) {
@@ -495,7 +486,7 @@
       }
     } catch(e) {}
     return _setAttribute.call(this, name, value);
-  }, 'setAttribute');
+  }, 'setAttribute') }); } catch(e) {}
 
 
   // ═══════════════════════════════════════════════════════════════
@@ -515,29 +506,29 @@
     } catch(e8) {}
   }
 
-  HTMLCanvasElement.prototype.toDataURL = disguise(function toDataURL() {
+  try { Object.defineProperty(HTMLCanvasElement.prototype, 'toDataURL', { configurable: true, enumerable: false, writable: true, value: disguise(function toDataURL() {
     var copy = _origCE.call(document, 'canvas');
     copy.width = this.width; copy.height = this.height;
     var ctx2 = copy.getContext('2d');
     if (ctx2) ctx2.drawImage(this, 0, 0);
     applyCanvasNoise(copy);
     return _origToDataURL.apply(copy, arguments);
-  }, 'toDataURL');
+  }, 'toDataURL') }); } catch(e) {}
 
-  HTMLCanvasElement.prototype.toBlob = disguise(function toBlob(cb, type, quality) {
+  try { Object.defineProperty(HTMLCanvasElement.prototype, 'toBlob', { configurable: true, enumerable: false, writable: true, value: disguise(function toBlob(cb, type, quality) {
     var copy = _origCE.call(document, 'canvas');
     copy.width = this.width; copy.height = this.height;
     var ctx2 = copy.getContext('2d');
     if (ctx2) ctx2.drawImage(this, 0, 0);
     applyCanvasNoise(copy);
     return _origToBlob.call(copy, cb, type, quality);
-  }, 'toBlob');
+  }, 'toBlob') }); } catch(e) {}
 
-  CanvasRenderingContext2D.prototype.getImageData = disguise(function getImageData(sx, sy, sw, sh) {
+  try { Object.defineProperty(CanvasRenderingContext2D.prototype, 'getImageData', { configurable: true, enumerable: false, writable: true, value: disguise(function getImageData(sx, sy, sw, sh) {
     var data = _origGetImageData.call(this, sx, sy, sw, sh);
     for (var i = 0; i < data.data.length; i += 68) { data.data[i] ^= 1; }
     return data;
-  }, 'getImageData');
+  }, 'getImageData') }); } catch(e) {}
 
 
   // ═══════════════════════════════════════════════════════════════
@@ -551,7 +542,7 @@
 
     glTypes.forEach(function(GL) {
       var _origGetParam = GL.prototype.getParameter;
-      GL.prototype.getParameter = disguise(function getParameter(p) {
+      try { Object.defineProperty(GL.prototype, 'getParameter', { configurable: true, enumerable: false, writable: true, value: disguise(function getParameter(p) {
         if (p === UNMASKED_VENDOR)   return 'Google Inc. (Intel)';
         if (p === UNMASKED_RENDERER) return 'ANGLE (Intel, Intel(R) UHD Graphics 630 Direct3D11 vs_5_0 ps_5_0, D3D11)';
         if (p === 0x1F00) return 'WebKit';
@@ -559,7 +550,7 @@
         if (p === 0x1F02) return 'WebGL 1.0 (OpenGL ES 2.0 Chromium)';
         if (p === 0x8B8C) return 'WebGL GLSL ES 1.0 (OpenGL ES GLSL ES 1.0 Chromium)';
         return _origGetParam.call(this, p);
-      }, 'getParameter');
+      }, 'getParameter') }); } catch(e) {}
     });
   } catch(e9) {}
 
@@ -570,21 +561,21 @@
   try {
     if (typeof AnalyserNode !== 'undefined') {
       var _origGetFloat = AnalyserNode.prototype.getFloatFrequencyData;
-      AnalyserNode.prototype.getFloatFrequencyData = disguise(function getFloatFrequencyData(arr) {
+      try { Object.defineProperty(AnalyserNode.prototype, 'getFloatFrequencyData', { configurable: true, enumerable: false, writable: true, value: disguise(function getFloatFrequencyData(arr) {
         _origGetFloat.call(this, arr);
         for (var i = 0; i < arr.length; i += 7) {
           arr[i] = arr[i] + 0.0001;
         }
-      }, 'getFloatFrequencyData');
+      }, 'getFloatFrequencyData') }); } catch(e) {}
       
       if (AnalyserNode.prototype.getByteFrequencyData) {
         var _origGetByte = AnalyserNode.prototype.getByteFrequencyData;
-        AnalyserNode.prototype.getByteFrequencyData = disguise(function getByteFrequencyData(arr) {
+        try { Object.defineProperty(AnalyserNode.prototype, 'getByteFrequencyData', { configurable: true, enumerable: false, writable: true, value: disguise(function getByteFrequencyData(arr) {
           _origGetByte.call(this, arr);
           for (var i = 0; i < arr.length; i += 7) {
             arr[i] = (arr[i] + 1) % 256;
           }
-        }, 'getByteFrequencyData');
+        }, 'getByteFrequencyData') }); } catch(e) {}
       }
     }
   } catch(e10) {}
@@ -600,7 +591,7 @@
     var RTC = window.RTCPeerConnection || window.mozRTCPeerConnection;
     if (RTC) {
       var _origSLD = RTC.prototype.setLocalDescription;
-      RTC.prototype.setLocalDescription = disguise(function setLocalDescription(desc) {
+      try { Object.defineProperty(RTC.prototype, 'setLocalDescription', { configurable: true, enumerable: false, writable: true, value: disguise(function setLocalDescription(desc) {
         if (desc && desc.sdp) {
           desc = Object.assign({}, desc, {
             sdp: desc.sdp.replace(/([0-9]{1,3}(\.[0-9]{1,3}){3})/g, function(match) {
@@ -610,7 +601,7 @@
           });
         }
         return _origSLD.call(this, desc);
-      }, 'setLocalDescription');
+      }, 'setLocalDescription') }); } catch(e) {}
     }
   } catch(e11) {}
 
@@ -689,7 +680,7 @@
             sendMessage: disguise(function() { throw new Error('Could not establish connection.'); }, 'sendMessage'),
           }
         },
-        configurable: true, writable: true
+        configurable: true, writable: true, enumerable: true
       });
     }
 
@@ -739,33 +730,63 @@
     var pdfMime = { type: 'application/pdf', suffixes: 'pdf', description: 'Portable Document Format' };
     var pluginNames = ['PDF Viewer', 'Chrome PDF Viewer', 'Chromium PDF Viewer', 'Microsoft Edge PDF Viewer', 'WebKit built-in PDF'];
 
-    var _plugins = {
-      length: 5,
-      item: disguise(function item(i) { return this[i] || null; }, 'item'),
-      namedItem: disguise(function namedItem(n) { for (var i = 0; i < 5; i++) { if (this[i] && this[i].name === n) return this[i]; } return null; }, 'namedItem'),
-      refresh: disguise(function refresh() {}, 'refresh'),
-    };
-    _plugins[Symbol.iterator] = function*() { for (var i = 0; i < 5; i++) yield _plugins[i]; };
+    class PluginArray {
+      constructor() { this.length = 5; }
+      item(i) { return this[i] || null; }
+      namedItem(n) { for (var i = 0; i < this.length; i++) { if (this[i] && this[i].name === n) return this[i]; } return null; }
+      refresh() {}
+      *[Symbol.iterator]() { for (var i = 0; i < this.length; i++) yield this[i]; }
+      get [Symbol.toStringTag]() { return 'PluginArray'; }
+    }
+    class MimeTypeArray {
+      constructor() { this.length = 1; }
+      item(i) { return this[i] || null; }
+      namedItem(n) { return n === 'application/pdf' ? this[0] : null; }
+      *[Symbol.iterator]() { yield this[0]; }
+      get [Symbol.toStringTag]() { return 'MimeTypeArray'; }
+    }
+    class Plugin {
+      constructor(name, filename, description) { this.name = name; this.filename = filename; this.description = description; this.length = 1; }
+      item(i) { return this[i] || null; }
+      namedItem(n) { return this[0]; }
+      get [Symbol.toStringTag]() { return 'Plugin'; }
+    }
+    class MimeType {
+      constructor(type, suffixes, description, enabledPlugin) { this.type = type; this.suffixes = suffixes; this.description = description; this.enabledPlugin = enabledPlugin; }
+      get [Symbol.toStringTag]() { return 'MimeType'; }
+    }
+
+    // Wrap prototype methods with disguise to maintain stealth
+    ['item', 'namedItem', 'refresh'].forEach(m => {
+      if (PluginArray.prototype[m]) PluginArray.prototype[m] = disguise(PluginArray.prototype[m], m);
+      if (MimeTypeArray.prototype[m]) MimeTypeArray.prototype[m] = disguise(MimeTypeArray.prototype[m], m);
+      if (Plugin.prototype[m]) Plugin.prototype[m] = disguise(Plugin.prototype[m], m);
+    });
+
+    var _plugins = new PluginArray();
+    var _mimeTypes = new MimeTypeArray();
+    
+    var pdfMimeObj = new MimeType('application/pdf', 'pdf', 'Portable Document Format', null);
+    _mimeTypes[0] = pdfMimeObj;
+
     for (var i = 0; i < 5; i++) {
-      _plugins[i] = { name: pluginNames[i], filename: 'internal-pdf-viewer', description: 'Portable Document Format', length: 1, 0: pdfMime };
+      var p = new Plugin(pluginNames[i], 'internal-pdf-viewer', 'Portable Document Format');
+      p[0] = pdfMimeObj;
+      _plugins[i] = p;
+      if (i === 0) pdfMimeObj.enabledPlugin = p;
     }
 
     Object.defineProperty(Navigator.prototype, 'plugins', {
       get: disguise(function plugins() { return _plugins; }, 'get plugins'),
-      configurable: true
+      configurable: true, enumerable: true
     });
-
-    var _mimeTypes = {
-      0: pdfMime, length: 1,
-      item: disguise(function item(i) { return this[i] || null; }, 'item'),
-      namedItem: disguise(function namedItem(n) { return n === 'application/pdf' ? this[0] : null; }, 'namedItem'),
-      [Symbol.iterator]: function*() { yield pdfMime; }
-    };
 
     Object.defineProperty(Navigator.prototype, 'mimeTypes', {
       get: disguise(function mimeTypes() { return _mimeTypes; }, 'get mimeTypes'),
-      configurable: true
+      configurable: true, enumerable: true
     });
+
+
   } catch(e18) {}
 
 
@@ -825,14 +846,14 @@
   // ═══════════════════════════════════════════════════════════════
   try {
     var _perfNowOffset = Math.random() * 0.1; // small initial offset
-    Performance.prototype.now = disguise(function now() {
+    try { Object.defineProperty(Performance.prototype, 'now', { configurable: true, enumerable: false, writable: true, value: disguise(function now() {
       var t = _origPerfNow.call(this);
       // Add deterministic-ish sub-ms precision back
       // Use a simple hash of the integer part to generate consistent decimals
       var intPart = Math.floor(t);
       var frac = ((intPart * 2654435761) >>> 0) / 4294967296; // Knuth multiplicative hash
       return t + frac * 0.099; // Add 0-99µs of fake precision
-    }, 'now');
+    }, 'now') }); } catch(e) {}
   } catch(e19) {}
 
 
@@ -842,7 +863,7 @@
   // ═══════════════════════════════════════════════════════════════
   try {
     var _origCreateElement = Document.prototype.createElement;
-    Document.prototype.createElement = disguise(function createElement(tag) {
+    try { Object.defineProperty(Document.prototype, 'createElement', { configurable: true, enumerable: false, writable: true, value: disguise(function createElement(tag) {
       var el = _origCreateElement.apply(this, arguments);
       if (tag && tag.toLowerCase() === 'iframe') {
         var patchPending = true;
@@ -864,7 +885,7 @@
         _setTimeout(patchIframeToString, 200);
       }
       return el;
-    }, 'createElement');
+    }, 'createElement') }); } catch(e) {}
   } catch(e20) {}
 
 })();

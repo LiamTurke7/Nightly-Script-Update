@@ -1,4 +1,4 @@
-// Valence Stealth Engine v3.1.0 — Bypass Script
+// Valence Stealth Engine v3.1.1 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
 //
@@ -8,11 +8,21 @@
 // 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
 //
 // Changelog:
+// - v3.1.1 (2026-09-10): Added search engine exemption filter to run native Firefox on Google/Bing and updated Chrome UA to stable release.
 // - v3.1.0 (2026-09-10): Standardized WebIDL prototype descriptors, reference equality, and Chrome-format function toString serialization.
 // - v3.0.0 (2026-09-10): Baseline Stealth Engine v3 release.
 
 (function() {
   'use strict';
+  // Search engine exemption: allow normal search engines (Google, Bing, DuckDuckGo, Yahoo)
+  // to run unmodified using native browser behavior.
+  try {
+    var host = (window.location && window.location.hostname) ? window.location.hostname : '';
+    if (/(^|\.)(google\.[a-z.]+|bing\.com|duckduckgo\.com|search\.yahoo\.com)$/i.test(host)) {
+      return;
+    }
+  } catch(eHost) {}
+
   var GUARD = Symbol.for('__vs3');
   if (window[GUARD]) return;
   Object.defineProperty(window, GUARD, { value: 1, writable: false, enumerable: false, configurable: false });
@@ -619,7 +629,7 @@
   // 12. NAVIGATOR / USER-AGENT SPOOFING (Chrome 152)
   // ═══════════════════════════════════════════════════════════════
   try {
-    var CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.82 Safari/537.36';
+    var CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.6943.142 Safari/537.36';
 
     var _languages = Object.freeze(['en-US', 'en']);
 
@@ -697,9 +707,9 @@
     if (!navigator.userAgentData) {
       var _uaData = {
         brands: [
-          { brand: 'Chromium', version: '152' },
-          { brand: 'Google Chrome', version: '152' },
-          { brand: 'Not:A-Brand', version: '24' }
+          { brand: 'Chromium', version: '133' },
+          { brand: 'Google Chrome', version: '133' },
+          { brand: 'Not(A:Brand', version: '99' }
         ],
         mobile: false,
         platform: 'Windows',
@@ -707,16 +717,16 @@
           return Promise.resolve({
             architecture: 'x86', bitness: '64',
             brands: [
-              { brand: 'Chromium', version: '152.0.7977.82' },
-              { brand: 'Google Chrome', version: '152.0.7977.82' },
-              { brand: 'Not:A-Brand', version: '24.0.0.0' }
+              { brand: 'Chromium', version: '133.0.6943.142' },
+              { brand: 'Google Chrome', version: '133.0.6943.142' },
+              { brand: 'Not(A:Brand', version: '99.0.0.0' }
             ],
             fullVersionList: [
-              { brand: 'Chromium', version: '152.0.7977.82' },
-              { brand: 'Google Chrome', version: '152.0.7977.82' }
+              { brand: 'Chromium', version: '133.0.6943.142' },
+              { brand: 'Google Chrome', version: '133.0.6943.142' }
             ],
             mobile: false, model: '', platform: 'Windows',
-            platformVersion: '10.0.0', uaFullVersion: '152.0.7977.82'
+            platformVersion: '10.0.0', uaFullVersion: '133.0.6943.142'
           });
         }, 'getHighEntropyValues'),
         toJSON: disguise(function() {

@@ -14,7 +14,9 @@ pref("browser.startup.homepage", "https://google.com");
 pref("browser.newtabpage.enabled", true);
 pref("full-screen-api.warning.timeout", 0);
 pref("dom.security.https_only_mode", false);
-pref("general.useragent.override", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.7977.82 Safari/537.36");
+// User-Agent is handled dynamically per-domain by valence.cfg:
+// Search engines receive native Firefox UA (matching TLS), while other sites receive Chrome 133.
+// pref("general.useragent.override", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.6943.142 Safari/537.36");
 // Restore full timer precision (Firefox reduces to 1ms by default)
 pref("privacy.reduceTimerPrecision", false);
 // CRITICAL: Do NOT enable resistFingerprinting — it fights with the stealth engine

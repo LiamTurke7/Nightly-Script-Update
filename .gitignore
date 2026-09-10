@@ -1,0 +1,17 @@
+# Ignore everything in the browser directory
+*
+
+# But allow these specific config files
+!valence-stealth.js
+!valence.cfg
+!defaults/
+!defaults/pref/
+!defaults/pref/valence-prefs.js
+!defaults/pref/autoconfig.js
+!distribution/
+!distribution/policies.json
+
+# Allow the launcher scripts
+!launch-valence.bat
+!launch-valence.sh
+!.gitignore

@@ -1,4 +1,4 @@
-// Valence Stealth Engine v3.1.9 — Bypass Script
+// Valence Stealth Engine v3.2.0 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
 //
@@ -8,6 +8,7 @@
 // 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
 //
 // Changelog:
+// - v3.2.0 (2026-09-17): Added Safe Exam Browser (SEB) compatibility layer — injected window.SafeExamBrowser API object and SEB-specific navigator properties so client-side SEB detection scripts pass; HTTP-level X-SafeExamBrowser-ConfigKeyHash header injection added in valence.cfg.
 // - v3.1.9 (2026-09-11): Emulated navigator.deviceMemory (8GB) and worker thread propagation; added Battery Status API (navigator.getBattery); aligned Notification.maxActions (=2); implemented deep window.chrome.app methods (getIsInstalled, getDetails, installState); emulated Chromium hardware APIs (usb, bluetooth, hid, serial); hooked WebGL getExtension and getSupportedExtensions for WEBGL_debug_renderer_info; propagated window.chrome to child container realms.
 // - v3.1.8 (2026-09-11): Added NetworkInformation (navigator.connection) with standard Chrome 4G metrics; harmonized Permissions API and Notification.permission state; hardened WebRTC createOffer, createAnswer, and localDescription SDP against early private LAN IP leakage.
 // - v3.1.7 (2026-09-11): Completely eliminated internal GUARD symbol on window; patched window.Reflect.ownKeys, window.Object.getOwnPropertySymbols, and window.Error.prototype across both Cu.Sandbox and page window contexts; added V8 stack formatting and captureStackTrace to all window error prototypes and container windows.
@@ -1469,6 +1470,75 @@
     }
     patchErrorConstructors({ Error: Error });
   } catch(eStack) {}
+
+  // ═══════════════════════════════════════════════════════════════
+  // SEB (Safe Exam Browser) Compatibility Layer
+  // Emulates the client-side SEB API that exam portals check via JavaScript.
+  // This covers:
+  //   - window.SafeExamBrowser object with version/API methods
+  //   - navigator.userAgent containing "SEB/" token
+  //   - window.SEB legacy alias
+  // ═══════════════════════════════════════════════════════════════
+  try {
+    // SEB API object — exam portals check for its existence
+    var sebAPI = {
+      version: '3.3.2',
+      security: {
+        configKey: '',
+        browserExamKey: '',
+        updateKeys: disguise(function updateKeys() {}, 'updateKeys')
+      },
+      settings: {
+        get: disguise(function get(key) {
+          var defaults = {
+            'hashedQuitPassword': '',
+            'sendBrowserExamKey': true,
+            'browserViewMode': 1,
+            'showTaskBar': false,
+            'enableSebBrowser': true
+          };
+          return key in defaults ? defaults[key] : undefined;
+        }, 'get'),
+        set: disguise(function set(key, value) {}, 'set')
+      },
+      isWindowSEB: disguise(function isWindowSEB() { return true; }, 'isWindowSEB'),
+      getConfigKeyHash: disguise(function getConfigKeyHash(url) {
+        // Client-side portals sometimes call this; return empty since
+        // the actual hash is computed and sent as an HTTP header by valence.cfg
+        return '';
+      }, 'getConfigKeyHash')
+    };
+
+    Object.defineProperty(window, 'SafeExamBrowser', {
+      value: sebAPI,
+      writable: false,
+      enumerable: true,
+      configurable: false
+    });
+
+    // Legacy alias: some older portals check window.SEB
+    Object.defineProperty(window, 'SEB', {
+      value: sebAPI,
+      writable: false,
+      enumerable: false,
+      configurable: false
+    });
+
+    // Some portals also check navigator.userAgent for the "SEB/" token.
+    // Append it if not already present.
+    try {
+      var currentUA = navigator.userAgent || '';
+      if (currentUA.indexOf('SEB/') === -1) {
+        var sebUA = currentUA + ' SEB/3.3.2';
+        Object.defineProperty(Navigator.prototype, 'userAgent', {
+          get: disguise(function userAgent() { return sebUA; }, 'get userAgent'),
+          configurable: true,
+          enumerable: true
+        });
+      }
+    } catch(eUA) {}
+
+  } catch(eSEB) {}
 
 })();
 

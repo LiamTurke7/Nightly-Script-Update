@@ -4,6 +4,7 @@
 # But allow these specific config files
 !valence-stealth.js
 !valence.cfg
+!seb-config.json
 !defaults/
 !defaults/pref/
 !defaults/pref/valence-prefs.js

@@ -1,4 +1,4 @@
-// Valence Stealth Engine v3.2.1 — Bypass Script
+// Valence Stealth Engine v3.2.2 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
 //
@@ -8,6 +8,7 @@
 // 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
 //
 // Changelog:
+// - v3.2.2 (2026-09-17): Decoupled startup git pull from valence.cfg so auto-pull only runs when launch-valence.sh is invoked; replaced deprecated XPCOM unicode converter with pure JS SHA-256 for 100% reliable synchronous SEB request hash generation; aligned outgoing HTTP User-Agent with SEB/3.3.2 token when SEB mode is active.
 // - v3.2.1 (2026-09-17): Upgraded SEB Compatibility Engine to full dual-header mode — valence.cfg now loads seb-config.json (direct hex keys or .seb plist file parsing), computes Config Key via sorted-JSON SHA256 algorithm, and injects both X-SafeExamBrowser-ConfigKeyHash and X-SafeExamBrowser-RequestHash per-request; JS API layer unchanged.
 // - v3.2.0 (2026-09-17): Added Safe Exam Browser (SEB) compatibility layer — injected window.SafeExamBrowser API object and SEB-specific navigator properties so client-side SEB detection scripts pass; HTTP-level X-SafeExamBrowser-ConfigKeyHash header injection added in valence.cfg.
 // - v3.1.9 (2026-09-11): Emulated navigator.deviceMemory (8GB) and worker thread propagation; added Battery Status API (navigator.getBattery); aligned Notification.maxActions (=2); implemented deep window.chrome.app methods (getIsInstalled, getDetails, installState); emulated Chromium hardware APIs (usb, bluetooth, hid, serial); hooked WebGL getExtension and getSupportedExtensions for WEBGL_debug_renderer_info; propagated window.chrome to child container realms.

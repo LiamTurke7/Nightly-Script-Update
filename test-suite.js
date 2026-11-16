@@ -483,6 +483,23 @@
         }
       } catch(e) { this.log('Cross-Realm Propagation', 'Child <iframe> window.chrome Check', false, e.message); }
 
+      // 24. Cross-Realm Container Document Visibility & Focus Integrity
+      try {
+        if (typeof document !== 'undefined' && document.body) {
+          const ifr = document.createElement('iframe');
+          ifr.style.display = 'none';
+          document.body.appendChild(ifr);
+          const childWin = ifr.contentWindow;
+          const childDoc = childWin ? (childWin.document || childWin.contentDocument) : null;
+          const hiddenFalse = childDoc ? (childDoc.hidden === false) : true;
+          const stateVisible = childDoc ? (childDoc.visibilityState === 'visible') : true;
+          const hasFocusTrue = childDoc && typeof childDoc.hasFocus === 'function' ? (childDoc.hasFocus() === true) : true;
+          const visibilityClean = hiddenFalse && stateVisible && hasFocusTrue;
+          this.log('Cross-Realm Propagation', 'Child <iframe> Context Inherits Visibility API', visibilityClean, `hidden=${childDoc ? childDoc.hidden : 'N/A'}, state=${childDoc ? childDoc.visibilityState : 'N/A'}`);
+          document.body.removeChild(ifr);
+        }
+      } catch(e) { this.log('Cross-Realm Propagation', 'Child <iframe> Visibility API Check', false, e.message); }
+
       return this.summary();
     }
   };

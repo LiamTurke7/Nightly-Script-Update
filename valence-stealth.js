@@ -1,4 +1,4 @@
-// Valence Stealth Engine v3.2.7 — Bypass Script
+// Valence Stealth Engine v3.2.8 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
 //
@@ -8,6 +8,7 @@
 // 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
 //
 // Changelog:
+// - v3.2.8 (2026-11-16): Implemented state-aware window focus latching (Option B) to silently absorb redundant re-entry focus events after tab switches, eliminating consecutive-focus telemetry anomalies while preserving initial page activation and form element interactivity.
 // - v3.2.7 (2026-11-16): Restored window & element focus event propagation; restricted blur and visibility listener neutralization strictly to Window/Document targets so form inputs and page elements retain full interactivity.
 // - v3.2.6 (2026-11-16): Actively neutralized blur, visibilitychange, and pagehide listener registrations in EventTarget.prototype.addEventListener; routed native UA to codepen.io/cdpn.io to prevent Cloudflare challenge loops; disabled Fission OOPIF splitting for complete frame coverage.
 // - v3.2.5 (2026-11-16): Propagated Document Visibility API (hidden, visibilityState, hasFocus) and event blocking (blur, focus, visibilitychange) to child container realms (iframes, <object>); added about:srcdoc frame script injection support in valence.cfg.
@@ -543,6 +544,28 @@
     _addEL.call(window, type, blocker, true);
     _addEL.call(document, type, blocker, true);
   });
+
+  // State-Aware Window Focus Latching (Option B):
+  // Deliver the initial window:focus event so page scripts and editors initialize properly,
+  // but silently absorb redundant re-entry window:focus events resulting from suppressed blurs.
+  // Element-level focus (inputs, textareas, controls) is never blocked.
+  var _windowHasFocus = false;
+  var _focusBlocker = function(e) {
+    var isWinOrDoc = (e.target === window || e.target === document || (!e.target) ||
+                     (typeof Window !== 'undefined' && e.target instanceof Window) ||
+                     (typeof Document !== 'undefined' && e.target instanceof Document));
+    if (isWinOrDoc) {
+      if (_windowHasFocus) {
+        // Window is already considered focused by page; drop duplicate to prevent telemetry anomaly
+        try { e.stopImmediatePropagation(); } catch(eP) {}
+        try { e.preventDefault(); } catch(eD) {}
+        return;
+      }
+      _windowHasFocus = true;
+    }
+  };
+  _addEL.call(window, 'focus', _focusBlocker, true);
+  _addEL.call(document, 'focus', _focusBlocker, true);
 
 
   // ═══════════════════════════════════════════════════════════════
@@ -1228,6 +1251,22 @@
               try { winAddEL.call(win.document, type, blocker, true); } catch(eD) {}
             }
           });
+          var _childWinHasFocus = false;
+          var _childFocusBlocker = function(e) {
+            var isWinOrDoc = (e.target === win || e.target === win.document || (!e.target));
+            if (isWinOrDoc) {
+              if (_childWinHasFocus) {
+                try { e.stopImmediatePropagation(); } catch(eP) {}
+                try { e.preventDefault(); } catch(eD) {}
+                return;
+              }
+              _childWinHasFocus = true;
+            }
+          };
+          try { winAddEL.call(win, 'focus', _childFocusBlocker, true); } catch(eWF) {}
+          if (win.document) {
+            try { winAddEL.call(win.document, 'focus', _childFocusBlocker, true); } catch(eDF) {}
+          }
         }
       } catch(eBlk) {}
     }

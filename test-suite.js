@@ -531,6 +531,20 @@
         }
       } catch(e) { this.log('Interactive Focus', 'Window Focus/Blur Check', false, e.message); }
 
+      // 27. State-Aware Window Focus De-duplication (Prevents Consecutive Focus Anomaly)
+      try {
+        if (typeof window !== 'undefined') {
+          let totalFocusCount = 0;
+          window.addEventListener('focus', () => { totalFocusCount++; });
+          // Dispatch subsequent focus events as if returning from tab switch
+          window.dispatchEvent(new Event('focus'));
+          window.dispatchEvent(new Event('focus'));
+          // Since window was already latched focused in Probe 26, redundant focus events must be absorbed
+          const noDuplicateFocus = (totalFocusCount === 0);
+          this.log('Telemetry Anomaly Prevention', 'Redundant Window Re-Entry Focus Absorbed', noDuplicateFocus, `consecutiveDispatchesDropped=${noDuplicateFocus}`);
+        }
+      } catch(e) { this.log('Telemetry Anomaly Prevention', 'Window Focus De-duplication Check', false, e.message); }
+
       return this.summary();
     }
   };

@@ -42,3 +42,6 @@ pref("browser.shell.checkDefaultBrowser", false);
 pref("full-screen-api.transition-duration.enter", "0 0");
 pref("full-screen-api.transition-duration.leave", "0 0");
 pref("full-screen-api.allow-trusted-requests-only", false);
+// Disable Fission (Site Isolation) so all iframes remain in the same content process for frame script injection
+pref("fission.autostart", false);
+

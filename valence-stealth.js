@@ -1,4 +1,4 @@
-// Valence Stealth Engine v3.2.5 — Bypass Script
+// Valence Stealth Engine v3.2.6 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
 //
@@ -8,6 +8,7 @@
 // 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
 //
 // Changelog:
+// - v3.2.6 (2026-11-16): Actively neutralized blur, visibilitychange, and pagehide listener registrations in EventTarget.prototype.addEventListener; routed native UA to codepen.io/cdpn.io to prevent Cloudflare challenge loops; disabled Fission OOPIF splitting for complete frame coverage.
 // - v3.2.5 (2026-11-16): Propagated Document Visibility API (hidden, visibilityState, hasFocus) and event blocking (blur, focus, visibilitychange) to child container realms (iframes, <object>); added about:srcdoc frame script injection support in valence.cfg.
 // - v3.2.4 (2026-10-18): Removed third-party exam-software emulation layer and its related config handling; privacy features unchanged.
 // - v3.2.2 (2026-09-17): Decoupled startup git pull from valence.cfg so auto-pull only runs when launch-valence.sh is invoked.
@@ -393,6 +394,9 @@
   var _ourSyntheticEvents = new WeakSet();
 
   try { Object.defineProperty(EventTarget.prototype, 'addEventListener', { configurable: true, enumerable: false, writable: true, value: disguise(function addEventListener(type, listener, options) {
+    if (type === 'blur' || type === 'visibilitychange' || type === 'pagehide') {
+      return;
+    }
     if ((type === 'mousemove' || type === 'pointermove') && listener) {
       var fn = typeof listener === 'function' ? listener : (typeof listener.handleEvent === 'function' ? listener.handleEvent : null);
       if (fn) {
@@ -429,6 +433,9 @@
   }, 'addEventListener') }); } catch(e) {}
 
   try { Object.defineProperty(EventTarget.prototype, 'removeEventListener', { configurable: true, enumerable: false, writable: true, value: disguise(function removeEventListener(type, listener, options) {
+    if (type === 'blur' || type === 'visibilitychange' || type === 'pagehide') {
+      return;
+    }
     if ((type === 'mousemove' || type === 'pointermove') && listener) {
       var wrapperMap = _listenerMap.get(listener);
       if (wrapperMap && wrapperMap[type]) {
@@ -512,7 +519,8 @@
 
   BLOCKED.forEach(function(type) {
     var blocker = function(e) {
-      if (e.isTrusted) { e.stopImmediatePropagation(); e.preventDefault(); }
+      try { e.stopImmediatePropagation(); } catch(eP) {}
+      try { e.preventDefault(); } catch(eD) {}
     };
     _addEL.call(window, type, blocker, true);
     _addEL.call(document, type, blocker, true);

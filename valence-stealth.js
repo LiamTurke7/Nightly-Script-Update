@@ -1,4 +1,4 @@
-// Valence Stealth Engine v3.2.6 — Bypass Script
+// Valence Stealth Engine v3.2.7 — Bypass Script
 // Injected at DOMWindowCreated via Cu.Sandbox (wantXrays: false)
 // This runs BEFORE any page scripts in the page's own JS context.
 //
@@ -8,6 +8,7 @@
 // 2. You MUST add an entry to the Changelog below with the version, date, and description of changes.
 //
 // Changelog:
+// - v3.2.7 (2026-11-16): Restored window & element focus event propagation; restricted blur and visibility listener neutralization strictly to Window/Document targets so form inputs and page elements retain full interactivity.
 // - v3.2.6 (2026-11-16): Actively neutralized blur, visibilitychange, and pagehide listener registrations in EventTarget.prototype.addEventListener; routed native UA to codepen.io/cdpn.io to prevent Cloudflare challenge loops; disabled Fission OOPIF splitting for complete frame coverage.
 // - v3.2.5 (2026-11-16): Propagated Document Visibility API (hidden, visibilityState, hasFocus) and event blocking (blur, focus, visibilitychange) to child container realms (iframes, <object>); added about:srcdoc frame script injection support in valence.cfg.
 // - v3.2.4 (2026-10-18): Removed third-party exam-software emulation layer and its related config handling; privacy features unchanged.
@@ -394,7 +395,14 @@
   var _ourSyntheticEvents = new WeakSet();
 
   try { Object.defineProperty(EventTarget.prototype, 'addEventListener', { configurable: true, enumerable: false, writable: true, value: disguise(function addEventListener(type, listener, options) {
-    if (type === 'blur' || type === 'visibilitychange' || type === 'pagehide') {
+    var isWinOrDoc = false;
+    try {
+      isWinOrDoc = (this === window || this === document ||
+                   (typeof Window !== 'undefined' && this instanceof Window) ||
+                   (typeof Document !== 'undefined' && this instanceof Document) ||
+                   (!this.nodeType && this.window === this));
+    } catch(eW) {}
+    if (isWinOrDoc && (type === 'blur' || type === 'visibilitychange' || type === 'pagehide')) {
       return;
     }
     if ((type === 'mousemove' || type === 'pointermove') && listener) {
@@ -433,7 +441,14 @@
   }, 'addEventListener') }); } catch(e) {}
 
   try { Object.defineProperty(EventTarget.prototype, 'removeEventListener', { configurable: true, enumerable: false, writable: true, value: disguise(function removeEventListener(type, listener, options) {
-    if (type === 'blur' || type === 'visibilitychange' || type === 'pagehide') {
+    var isWinOrDoc = false;
+    try {
+      isWinOrDoc = (this === window || this === document ||
+                   (typeof Window !== 'undefined' && this instanceof Window) ||
+                   (typeof Document !== 'undefined' && this instanceof Document) ||
+                   (!this.nodeType && this.window === this));
+    } catch(eW) {}
+    if (isWinOrDoc && (type === 'blur' || type === 'visibilitychange' || type === 'pagehide')) {
       return;
     }
     if ((type === 'mousemove' || type === 'pointermove') && listener) {
@@ -513,12 +528,15 @@
   // 6. EVENT BLOCKING — Use capturing listeners to stop events
   //    from reaching page handlers. Added AFTER our own monitors.
   // ═══════════════════════════════════════════════════════════════
-  var BLOCKED = ['visibilitychange', 'blur', 'focus', 'pagehide', 'pageshow',
+  var BLOCKED = ['visibilitychange', 'blur', 'pagehide', 'pageshow',
                  'freeze', 'resume', 'pointerleave', 'pointerout',
                  'mouseleave', 'mouseout', 'dragleave'];
 
   BLOCKED.forEach(function(type) {
     var blocker = function(e) {
+      if (e.target && e.target !== window && e.target !== document && (typeof Element !== 'undefined' && e.target instanceof Element)) {
+        return;
+      }
       try { e.stopImmediatePropagation(); } catch(eP) {}
       try { e.preventDefault(); } catch(eD) {}
     };
@@ -1199,7 +1217,11 @@
         if (typeof winAddEL === 'function') {
           BLOCKED.forEach(function(type) {
             var blocker = function(e) {
-              if (e.isTrusted) { e.stopImmediatePropagation(); e.preventDefault(); }
+              if (e.target && e.target !== win && e.target !== win.document && (typeof Element !== 'undefined' && e.target instanceof Element)) {
+                return;
+              }
+              try { e.stopImmediatePropagation(); } catch(eP) {}
+              try { e.preventDefault(); } catch(eD) {}
             };
             try { winAddEL.call(win, type, blocker, true); } catch(eW) {}
             if (win.document) {

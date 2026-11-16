@@ -500,6 +500,37 @@
         }
       } catch(e) { this.log('Cross-Realm Propagation', 'Child <iframe> Visibility API Check', false, e.message); }
 
+      // 25. Form Element Focus & Blur Interactivity
+      try {
+        if (typeof document !== 'undefined' && document.body) {
+          const inp = document.createElement('input');
+          document.body.appendChild(inp);
+          let inputGotFocus = false;
+          let inputGotBlur = false;
+          inp.addEventListener('focus', () => { inputGotFocus = true; });
+          inp.addEventListener('blur', () => { inputGotBlur = true; });
+          inp.dispatchEvent(new Event('focus'));
+          inp.dispatchEvent(new Event('blur'));
+          const inputInteractive = inputGotFocus && inputGotBlur;
+          this.log('Interactive Focus', 'Form Input Receives Native Focus & Blur Events', inputInteractive, `focus=${inputGotFocus}, blur=${inputGotBlur}`);
+          document.body.removeChild(inp);
+        }
+      } catch(e) { this.log('Interactive Focus', 'Form Input Focus/Blur Check', false, e.message); }
+
+      // 26. Window Focus Allowed & Window Tab-Switch Blur Neutralized
+      try {
+        if (typeof window !== 'undefined') {
+          let winFocusFired = false;
+          let winBlurFired = false;
+          window.addEventListener('focus', () => { winFocusFired = true; });
+          window.addEventListener('blur', () => { winBlurFired = true; });
+          window.dispatchEvent(new Event('focus'));
+          window.dispatchEvent(new Event('blur'));
+          const stealthFocusClean = winFocusFired && !winBlurFired;
+          this.log('Interactive Focus', 'Window Receives Focus While Tab Blur Is Neutralized', stealthFocusClean, `winFocus=${winFocusFired}, winBlur=${winBlurFired}`);
+        }
+      } catch(e) { this.log('Interactive Focus', 'Window Focus/Blur Check', false, e.message); }
+
       return this.summary();
     }
   };
